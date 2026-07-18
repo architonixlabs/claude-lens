@@ -1,0 +1,13 @@
+node_modules
+data
+test-results
+playwright-report
+.git
+.github
+docs
+tests
+sim/stress.js
+*.bat
+*.log
+.env
+.env.*

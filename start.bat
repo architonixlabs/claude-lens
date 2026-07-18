@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 REM ===========================================================================
-REM  Agent Constellation launcher
+REM  ClaudeLens launcher
 REM    start.bat        - live mode (captures real Claude Code sessions)
 REM    start.bat demo   - demo mode (loops sample multi-agent sessions)
 REM  Override the port:  set PORT=5000 && start.bat
@@ -39,7 +39,7 @@ set "MODE="
 if /I "%~1"=="demo" set "MODE=--demo"
 
 echo.
-echo   Agent Constellation  -^>  http://localhost:%PORT%
+echo   ClaudeLens  -^>  http://localhost:%PORT%
 if defined MODE (
   echo   Mode: DEMO ^(looping sample sessions^)
 ) else (

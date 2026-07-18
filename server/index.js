@@ -19,6 +19,7 @@ import { WebSocketServer } from 'ws';
 import { SessionManager } from './sessions.js';
 import { sdkMessageToPayloads } from './sdk.js';
 import * as persist from './persist.js';
+import { redactPayload } from './redact.js';
 import { driveDemo } from '../sim/simulator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,6 +35,23 @@ const flagVal = (name, dflt) => {
 const PORT = Number(flagVal('port', process.env.PORT || 4317));
 const DEMO = hasFlag('--demo') || process.env.AGENTVIZ_DEMO === '1' || process.env.AGENTVIZ_DEMO === 'true';
 const SPEED = Number(flagVal('speed', process.env.AGENTVIZ_SPEED || 1));
+
+// Reject junk before it reaches the normalizer: a hook payload must be a plain
+// object with a string event name. Bad shapes get a 400, not a silent no-op.
+function validateHookPayload(req, res, next) {
+  const b = req.body;
+  if (!b || typeof b !== 'object' || Array.isArray(b)) {
+    return res.status(400).json({ ok: false, error: 'body must be a JSON object' });
+  }
+  if (b.hook_event_name !== undefined && typeof b.hook_event_name !== 'string') {
+    return res.status(400).json({ ok: false, error: 'hook_event_name must be a string' });
+  }
+  const sid = b.session_id ?? b.sessionId;
+  if (sid !== undefined && typeof sid !== 'string' && typeof sid !== 'number') {
+    return res.status(400).json({ ok: false, error: 'session_id must be a string' });
+  }
+  next();
+}
 
 function send(ws, msg) {
   if (ws.readyState === ws.OPEN) {
@@ -62,9 +80,42 @@ export function createServer({ demo = DEMO, demoSpeed = SPEED } = {}) {
     return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
 
+  // Cheap in-memory rate limit on writes. A runaway hook loop (or a hostile
+  // client if you've exposed the port) shouldn't be able to spin the process.
+  // Generous by design: a busy real session bursts well under this.
+  const RATE_MAX = Number(process.env.AGENTVIZ_RATE_MAX || 600); // per window, per IP
+  const RATE_WINDOW_MS = 10_000;
+  const RATE_ALL = process.env.AGENTVIZ_RATE_ALL === '1'; // also limit loopback
+  const buckets = new Map(); // ip -> { count, resetAt }
+
+  // Loopback is exempt by default. The threat this guards against only exists
+  // once the port is deliberately exposed (HOST=0.0.0.0); throttling localhost
+  // would instead punish legitimate bursts — replay, many parallel subagents,
+  // sim/stress.js — which run far above any human-session rate.
+  const isLoopback = (ip) => !ip || ip === '::1' || ip === '127.0.0.1'
+    || ip === '::ffff:127.0.0.1' || ip.startsWith('127.');
+
+  function rateLimit(req, res, next) {
+    if (RATE_MAX <= 0) return next(); // 0 disables
+    const ip = req.ip || 'local';
+    if (!RATE_ALL && isLoopback(ip)) return next();
+    const now = Date.now();
+    let b = buckets.get(ip);
+    if (!b || now >= b.resetAt) { b = { count: 0, resetAt: now + RATE_WINDOW_MS }; buckets.set(ip, b); }
+    if (++b.count > RATE_MAX) {
+      res.setHeader('retry-after', Math.ceil((b.resetAt - now) / 1000));
+      return res.status(429).json({ ok: false, error: 'rate limited' });
+    }
+    if (buckets.size > 1000) { // keep the map from growing unbounded
+      for (const [k, v] of buckets) if (now >= v.resetAt) buckets.delete(k);
+    }
+    next();
+  }
+
   // ingest: hooks + simulator post raw Claude Code hook payloads here
-  app.post('/ingest', requireToken, (req, res) => {
-    const body = req.body || {};
+  app.post('/ingest', requireToken, rateLimit, validateHookPayload, (req, res) => {
+    // scrub credentials at the boundary — nothing secret reaches memory or disk
+    const body = redactPayload(req.body || {});
     const produced = manager.ingest(body);
     persist.record(body);
     // quiet by default: log only new sessions + errors (verbose logs everything)
@@ -79,14 +130,18 @@ export function createServer({ demo = DEMO, demoSpeed = SPEED } = {}) {
 
   // SDK apps POST their Claude Agent SDK stream messages here (one per message, or
   // an array). We translate them into hook payloads and run the same pipeline.
-  app.post('/ingest/sdk', requireToken, (req, res) => {
-    const body = req.body || {};
+  app.post('/ingest/sdk', requireToken, rateLimit, (req, res) => {
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return res.status(400).json({ ok: false, error: 'body must be a JSON object' });
+    }
     const messages = Array.isArray(body.messages) ? body.messages : [body.message];
     const ctx = { session_id: body.session_id, cwd: body.cwd, label: body.label };
     let produced = 0;
     for (const message of messages) {
       if (!message) continue;
-      for (const payload of sdkMessageToPayloads(message, ctx)) {
+      for (const raw of sdkMessageToPayloads(message, ctx)) {
+        const payload = redactPayload(raw);
         produced += manager.ingest(payload).length;
         persist.record(payload);
       }
@@ -168,6 +223,10 @@ export function createServer({ demo = DEMO, demoSpeed = SPEED } = {}) {
   wss.on('connection', (ws) => {
     let subscribedId = null;
     let subscribeAll = false; // combined "all sessions on one canvas" mode
+    // heartbeat: a closed laptop lid leaves a half-open socket that never fires
+    // 'close'. Mark alive on pong; the sweep below terminates the silent ones.
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
     send(ws, { type: 'sessions', sessions: manager.list() });
 
     const unsub = manager.subscribe((msg) => {
@@ -194,10 +253,21 @@ export function createServer({ demo = DEMO, demoSpeed = SPEED } = {}) {
     ws.on('error', unsub);
   });
 
+  // Sweep dead sockets every 30s. unref() so it never holds the process open.
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (ws.isAlive === false) { ws.terminate(); continue; }
+      ws.isAlive = false;
+      try { ws.ping(); } catch { /* socket already gone */ }
+    }
+  }, 30_000);
+  heartbeat.unref?.();
+
   let stopDemo = null;
   if (demo) stopDemo = driveDemo(manager, { speed: demoSpeed });
 
   const close = () => new Promise((resolve) => {
+    clearInterval(heartbeat);
     if (stopDemo) stopDemo();
     wss.close();
     server.close(() => resolve());

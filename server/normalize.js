@@ -169,7 +169,7 @@ export class Normalizer {
 
     switch (evName) {
       case 'SessionStart': {
-        const a = this._ensureAgent(ROOT_ID, { status: 'active', lastActiveAt: ts });
+        this._ensureAgent(ROOT_ID, { status: 'active', lastActiveAt: ts });
         out.push(this._mk(ts, 'session_start', ROOT_ID, {
           title: 'Session started', detail: shortText(payload.source || payload.cwd || ''),
         }));

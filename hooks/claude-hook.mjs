@@ -34,7 +34,7 @@ function readStdin() {
 }
 
 async function main() {
-  let payload = {};
+  let payload;
   try {
     const raw = await readStdin();
     payload = raw ? JSON.parse(raw) : {};

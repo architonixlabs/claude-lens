@@ -6,8 +6,16 @@
   "type": "module",
   "license": "MIT",
   "keywords": [
-    "claude", "claude-code", "anthropic", "agents", "multi-agent", "observability",
-    "visualization", "debugging", "agent-sdk", "hooks"
+    "claude",
+    "claude-code",
+    "anthropic",
+    "agents",
+    "multi-agent",
+    "observability",
+    "visualization",
+    "debugging",
+    "agent-sdk",
+    "hooks"
   ],
   "bin": {
     "claude-lens": "server/index.js"
@@ -21,7 +29,12 @@
     "uninstall-hooks": "node hooks/install-hooks.mjs --remove",
     "test": "playwright test",
     "test:unit": "node --test tests/*.test.mjs",
+    "test:all": "npm run lint && npm run test:unit && npm test",
     "test:headed": "playwright test --headed",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "stress": "node sim/stress.js",
     "postinstall-note": "run: npx playwright install chromium"
   },
@@ -30,7 +43,11 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1"
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.5"
   },
   "engines": {
     "node": ">=18"

@@ -216,7 +216,7 @@ export class SessionManager {
     const isNew = !session;
     if (!session) { session = new Session(id); this.sessions.set(id, session); this._evictIfNeeded(id); }
 
-    let produced = [];
+    let produced;
     try { produced = session.ingest(payload) || []; }
     catch { this.stats.dropped++; produced = []; }
 

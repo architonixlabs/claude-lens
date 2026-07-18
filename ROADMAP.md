@@ -9,19 +9,37 @@ TLS, rate-limiting, redaction — a v2, not a patch).
 - **`transcript_path` allowlist** (`~/.claude/*.jsonl`) — closes an arbitrary-file-read. Covered by `tests/security.test.mjs`.
 - **Graceful shutdown** (flush + close on SIGINT/SIGTERM).
 
-## 🔴 P0 — blockers before any "production" use
-- [ ] **`git init` + initial commit** — repo is not under version control yet.
-- [ ] **Auth on `/ingest` + APIs** — optional `AGENTVIZ_TOKEN`, enforced whenever `HOST` ≠ localhost (bearer / `X-Arx-Token`).
-- [ ] **Disk-DoS guard** — cap per-session file size + total `data/` size + a retention/expiry policy (today `data/` is unbounded on disk; only reload is capped to 40 files).
+## ✅ P0 — done (2026-07-18)
+- [x] **`git init` + initial commit** — repo under version control (`main`).
+- [x] **Auth on writes** — optional `AGENTVIZ_TOKEN` gates `/ingest`, `/ingest/sdk`,
+      `/api/sessions/clear` (`X-Agentviz-Token` or `Bearer`); reads stay open.
+      The hook bridge forwards it. Covered by `tests/auth.test.mjs`.
+- [x] **Disk-DoS guard** — 10 MB per-session-file cap + 300-file total cap with
+      oldest-first eviction.
+- [x] **Error-handling middleware** — bad JSON → 400, oversized → 413, else 500; never a crash.
+- [x] **Rename-safe hooks** — the installer identifies its own entries by script
+      filename, so a folder rename re-points cleanly and stays idempotent.
 
-## 🟠 P1 — polished product
-- [ ] Route **input validation** + express **error-handling middleware** (no unhandled 500s); basic **rate-limit** on `/ingest`.
-- [ ] **eslint + prettier** config + CI lint step.
-- [ ] **More unit tests** — `sessions.js` (eviction/usage/search), `sdk.js`, `persist.js`.
-- [ ] **Secret redaction** — commands/outputs may contain secrets; stored plaintext in `data/` + included in exports. Optional masking + privacy note.
-- [ ] **Cross-platform** — `start.sh` for macOS/Linux; verify hook install off Windows.
-- [ ] **Dockerfile** (org standard) + flip `private:false` / tag releases when publishing.
-- [ ] **WS heartbeat** (ping/pong) to reap dead sockets.
+## ✅ P1 — done (2026-07-18)
+
+- [x] **Input validation** on `/ingest` + `/ingest/sdk` (non-object body, wrong-typed
+      `hook_event_name`/`session_id` → 400) and a **rate limit** (600 req / 10 s / IP,
+      `AGENTVIZ_RATE_MAX`). **Loopback is exempt by default** — local bursts (replay,
+      parallel subagents, `sim/stress.js` at ~1.9k req/s) are legitimate; set
+      `AGENTVIZ_RATE_ALL=1` to throttle localhost too.
+- [x] **Secret redaction** (`server/redact.js`) — API keys, AWS ids, JWTs, bearer
+      tokens, `KEY=VALUE` secrets and inline URL credentials are masked at the ingest
+      boundary, so they never reach `data/` or `/api/export`. `AGENTVIZ_NO_REDACT=1`
+      opts out. Pattern-based, so treat `data/` as sensitive regardless.
+- [x] **eslint (flat config) + prettier**; `npm run lint` / `format` / `test:all`.
+- [x] **More unit tests** — `sessions.js`, `sdk.js`, `persist.js`, redaction, ingest
+      guards. **52 unit + 33 E2E**, lint clean.
+- [x] **Cross-platform** — `start.sh` for macOS/Linux mirroring `start.bat`.
+- [x] **Dockerfile** + `.dockerignore` (non-root, healthcheck, `/data` volume).
+- [x] **WS heartbeat** (ping/pong, 30 s sweep) to reap half-open sockets.
+
+Still open from P1: CI lint step (no CI configured yet); verify hook install on
+macOS/Linux; flip `private:false` when publishing.
 
 ## 🟡 P2 — future / only if hosting for a team
 - [ ] Multi-tenancy + real datastore; TLS via reverse proxy.
