@@ -19,6 +19,7 @@ const argFlag = (name) => {
 
 const PORT = argFlag('port') || process.env.AGENTVIZ_PORT || '4317';
 const URL = argFlag('url') || process.env.AGENTVIZ_URL || `http://127.0.0.1:${PORT}/ingest`;
+const TOKEN = argFlag('token') || process.env.AGENTVIZ_TOKEN || '';
 const TIMEOUT_MS = 400;
 
 function readStdin() {
@@ -51,7 +52,9 @@ async function main() {
   try {
     await fetch(URL, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: TOKEN
+        ? { 'content-type': 'application/json', 'x-agentviz-token': TOKEN }
+        : { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
       signal: ctrl.signal,
     });

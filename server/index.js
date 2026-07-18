@@ -51,8 +51,19 @@ export function createServer({ demo = DEMO, demoSpeed = SPEED } = {}) {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
 
+  // Optional shared-secret auth on write endpoints. Off by default (localhost);
+  // set AGENTVIZ_TOKEN to require it — important if you bind to 0.0.0.0. The hook
+  // bridge forwards it from its own AGENTVIZ_TOKEN env.
+  const TOKEN = process.env.AGENTVIZ_TOKEN || '';
+  function requireToken(req, res, next) {
+    if (!TOKEN) return next();
+    const hdr = req.get('x-agentviz-token') || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+    if (hdr === TOKEN) return next();
+    return res.status(401).json({ ok: false, error: 'unauthorized' });
+  }
+
   // ingest: hooks + simulator post raw Claude Code hook payloads here
-  app.post('/ingest', (req, res) => {
+  app.post('/ingest', requireToken, (req, res) => {
     const body = req.body || {};
     const produced = manager.ingest(body);
     persist.record(body);
@@ -68,7 +79,7 @@ export function createServer({ demo = DEMO, demoSpeed = SPEED } = {}) {
 
   // SDK apps POST their Claude Agent SDK stream messages here (one per message, or
   // an array). We translate them into hook payloads and run the same pipeline.
-  app.post('/ingest/sdk', (req, res) => {
+  app.post('/ingest/sdk', requireToken, (req, res) => {
     const body = req.body || {};
     const messages = Array.isArray(body.messages) ? body.messages : [body.message];
     const ctx = { session_id: body.session_id, cwd: body.cwd, label: body.label };
@@ -103,7 +114,7 @@ export function createServer({ demo = DEMO, demoSpeed = SPEED } = {}) {
   });
 
   // Clear all sessions in a given status (only 'idle' or 'ended' — never active).
-  app.post('/api/sessions/clear', (req, res) => {
+  app.post('/api/sessions/clear', requireToken, (req, res) => {
     const status = (req.body && req.body.status) || '';
     if (status !== 'idle' && status !== 'ended') {
       return res.status(400).json({ ok: false, error: "status must be 'idle' or 'ended'" });
@@ -139,6 +150,17 @@ export function createServer({ demo = DEMO, demoSpeed = SPEED } = {}) {
   });
 
   app.use(express.static(PUBLIC_DIR, { extensions: ['html'] }));
+
+  // last-resort error handler — malformed JSON → 400, anything else → 500 (never a crash)
+  app.use((err, _req, res, _next) => {
+    if (err && (err.type === 'entity.parse.failed' || err instanceof SyntaxError)) {
+      return res.status(400).json({ ok: false, error: 'invalid JSON' });
+    }
+    if (err && err.type === 'entity.too.large') return res.status(413).json({ ok: false, error: 'payload too large' });
+    console.error('unhandled request error:', err && err.message);
+    if (res.headersSent) return;
+    res.status(500).json({ ok: false, error: 'internal error' });
+  });
 
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: '/ws' });

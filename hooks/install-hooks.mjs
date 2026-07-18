@@ -20,7 +20,10 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BRIDGE = path.join(__dirname, 'claude-hook.mjs');
 const ENSURE = path.join(__dirname, 'ensure-server.mjs');
-const MARK = 'claude-multiagent-visualization'; // identifies our commands
+// Identify our own hook entries by our script filenames — NOT by folder path — so
+// a re-run still finds (and re-points) them after the project folder is renamed.
+// Only our .mjs scripts match; a different tool's claude-hook.js won't.
+const OURS = /[\\/](?:claude-hook|ensure-server)\.mjs\b/;
 
 const args = process.argv.slice(2);
 const has = (f) => args.includes(f);
@@ -47,8 +50,7 @@ function bridgeCommand() { return `node "${BRIDGE}"${portArg()}`; }
 function ensureCommand() { return `node "${ENSURE}"${portArg()}`; }
 
 function isOurs(cmd) {
-  return typeof cmd === 'string' && cmd.includes(MARK)
-    && (cmd.includes('claude-hook') || cmd.includes('ensure-server'));
+  return typeof cmd === 'string' && OURS.test(cmd);
 }
 
 function main() {
