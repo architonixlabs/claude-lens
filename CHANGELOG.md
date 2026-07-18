@@ -2,6 +2,26 @@
 
 All notable changes to ClaudeLens are documented here.
 
+## [1.0.1] — 2026-07-18
+
+Fixes the release pipeline. 1.0.0 shipped a Windows installer only, because the
+multi-platform build failed on every runner.
+
+### Fixed
+- `test:unit` no longer depends on the shell expanding a glob. npm runs scripts
+  through `cmd.exe` on Windows, which passed `tests/*.test.mjs` through literally
+  and failed the Windows job; the file list is now resolved in Node
+  (`scripts/run-unit-tests.mjs`), so it works on every OS and Node 18+.
+- Added the `author` field, without which electron-builder refuses to build the
+  Linux (`deb`/`AppImage`) and macOS targets.
+
+### Added
+- Multi-platform release workflow — Windows, macOS and Linux installers build in
+  parallel on GitHub runners and attach to the release on a `v*` tag.
+- `SIGNING.md` and `npm run make-cert` — self-signed Architonix Labs LLP
+  certificate for internal distribution, plus what public signing really costs.
+- Mermaid architecture, sequence and lifecycle diagrams in the README.
+
 ## [1.0.0] — 2026-07-18
 
 First packaged release: a desktop app, a hardened server, and CI.

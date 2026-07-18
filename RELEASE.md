@@ -1,10 +1,11 @@
-# ClaudeLens 1.0.0
+# ClaudeLens 1.0.1
 
 A **read-only live map & timeline debugger** for Claude Code and Claude Agent SDK runs — the
 orchestrator, every subagent, the skills and tools they call, tokens, errors and durations,
 across every session at once.
 
-This is the first packaged release: a tray-resident desktop app, a hardened server, and CI.
+A tray-resident desktop app, a hardened server, and CI. This patch fixes the release
+pipeline so macOS and Linux installers are actually produced — 1.0.0 only shipped Windows.
 
 ---
 
@@ -16,10 +17,10 @@ Download the installer for your platform from the release assets:
 
 | Platform | Asset | Notes |
 |----------|-------|-------|
-| Windows | `ClaudeLens-Setup-1.0.0-x64.exe` | NSIS installer; choose your install directory |
-| macOS | `ClaudeLens-1.0.0-{x64,arm64}.dmg` | Drag to Applications |
-| Linux | `ClaudeLens-1.0.0.AppImage` | `chmod +x` then run |
-| Linux (Debian/Ubuntu) | `claude-lens_1.0.0_amd64.deb` | `sudo apt install ./claude-lens_1.0.0_amd64.deb` |
+| Windows | `ClaudeLens-Setup-1.0.1-x64.exe` | NSIS installer; choose your install directory |
+| macOS | `ClaudeLens-1.0.1-{x64,arm64}.dmg` | Drag to Applications |
+| Linux | `ClaudeLens-1.0.1.AppImage` | `chmod +x` then run |
+| Linux (Debian/Ubuntu) | `claude-lens_1.0.1_amd64.deb` | `sudo apt install ./claude-lens_1.0.1_amd64.deb` |
 
 After launching:
 

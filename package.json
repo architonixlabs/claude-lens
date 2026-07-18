@@ -1,7 +1,7 @@
 {
   "name": "claude-lens",
   "productName": "ClaudeLens",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "ClaudeLens — a read-only live map & timeline debugger for Claude Code / Agent SDK multi-agent runs: orchestrator, subagents, skills, tools, tokens, errors — across every session.",
   "type": "module",
@@ -36,7 +36,7 @@
     "install-hooks": "node hooks/install-hooks.mjs",
     "uninstall-hooks": "node hooks/install-hooks.mjs --remove",
     "test": "playwright test",
-    "test:unit": "node --test tests/*.test.mjs",
+    "test:unit": "node scripts/run-unit-tests.mjs",
     "test:all": "npm run lint && npm run test:unit && npm test",
     "test:headed": "playwright test --headed",
     "lint": "eslint .",
@@ -62,5 +62,9 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "author": {
+    "name": "Architonix Labs LLP",
+    "email": "architonixlabs@gmail.com"
   }
 }
