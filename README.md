@@ -487,7 +487,7 @@ closed rather than leak.
   script filename (not folder name), so it re-points them cleanly and stays idempotent.
 - The server must be **restarted to pick up code changes** — the auto-start hook otherwise
   keeps an older build resident while the browser serves fresh files from disk.
-- Static analysis: `sonar-project.properties` is included per the Architonix Labs standard
-  (SonarQube `http://<build-host>:7001`); scan from a host with LAN reach using tokens from
-  the shared `scan.env` — never hard-code them. The server is LAN-only, so cloud CI can't
-  reach it; run the scanner from the deploy host or a self-hosted runner.
+- Static analysis: `sonar-project.properties` is included for SonarQube. Supply
+  `SONAR_HOST_URL` and `SONAR_TOKEN` from your own secret store — never hard-code them. If
+  your SonarQube is internal-only, run the scanner from a host on that network or a
+  self-hosted runner rather than cloud CI.

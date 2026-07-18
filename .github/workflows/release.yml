@@ -7,9 +7,8 @@ name: Release
 # Trigger by pushing a tag (v1.2.3), or manually via workflow_dispatch with the
 # tag name. Manual runs are handy for rebuilding assets without re-tagging.
 #
-# Cost note: this repo is private, so macOS runner minutes bill at 10x and
-# Windows at 2x against the monthly allowance. Linux is 1x. A full release is
-# roughly 10 macOS-equivalent minutes; make the repo public and all of it is free.
+# This repository is public, so GitHub-hosted runners are free and unlimited.
+# (On a private repo these minutes would bill at Linux 1x / Windows 2x / macOS 10x.)
 
 on:
   push:

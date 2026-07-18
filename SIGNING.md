@@ -169,15 +169,14 @@ manually with an existing tag:
 gh workflow run release.yml -f tag=v1.0.0
 ```
 
-**Cost.** This repo is private, so runner minutes bill against the monthly allowance with
-multipliers: **Linux 1x, Windows 2x, macOS 10x**. GitHub Free includes 2,000 minutes/month,
-so a full three-platform release costs roughly 60–80 "minutes" of that budget — comfortably
-within it for regular releases. Making the repo **public** makes all of it free and unlimited.
+**Cost.** This repository is public, so GitHub-hosted runners are **free and unlimited** —
+no minute budget to manage. (On a private repo the same release would bill against the
+monthly allowance with Linux 1x / Windows 2x / macOS 10x multipliers.)
 
-### Linux on the LAN box over SSH
+### Linux on your own machine over SSH
 
-Perfectly workable, and the deploy host (`<build-host>`) is reachable — but it's the *harder*
-path now that CI covers Linux for free. Use it when you want a build without touching CI:
+Perfectly workable, but the *harder* path now that CI covers Linux for free. Use it when you
+want a build without touching CI:
 
 ```bash
 ssh <user>@<build-host> '
@@ -194,9 +193,8 @@ docker run --rm -v "$PWD":/project electronuserland/builder:wine \
   /bin/bash -c "npm ci && npm run dist:linux"
 ```
 
-> SSH from this workstation currently fails with `Permission denied (publickey)` for user
-> `Ram` — the key at `~/.ssh/id_ed25519.pub` isn't authorised there yet. Fix with
-> `ssh-copy-id <user>@<build-host>` using the correct account.
+> The build host needs your public key in its `~/.ssh/authorized_keys` — `ssh-copy-id
+> <user>@<build-host>` if you get `Permission denied (publickey)`.
 
 ### Free macOS build options
 
