@@ -10,7 +10,7 @@ export default [
 
   // Server, hooks, simulator — Node ESM.
   {
-    files: ['server/**/*.js', 'sim/**/*.js', 'hooks/**/*.mjs', 'tests/**/*.mjs', '*.mjs'],
+    files: ['server/**/*.js', 'sim/**/*.js', 'hooks/**/*.mjs', 'tests/**/*.mjs', 'desktop/**/*.{js,mjs}', '*.mjs'],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',

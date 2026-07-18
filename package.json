@@ -1,6 +1,7 @@
 {
   "name": "claude-lens",
-  "version": "0.1.0",
+  "productName": "ClaudeLens",
+  "version": "1.0.0",
   "private": true,
   "description": "ClaudeLens — a read-only live map & timeline debugger for Claude Code / Agent SDK multi-agent runs: orchestrator, subagents, skills, tools, tokens, errors — across every session.",
   "type": "module",
@@ -17,6 +18,7 @@
     "agent-sdk",
     "hooks"
   ],
+  "main": "desktop/main.js",
   "bin": {
     "claude-lens": "server/index.js"
   },
@@ -25,6 +27,12 @@
     "dev": "node server/index.js",
     "demo": "node server/index.js --demo",
     "sim": "node sim/simulator.js",
+    "desktop": "electron .",
+    "icons": "node desktop/make-icons.mjs",
+    "dist": "npm run icons && electron-builder",
+    "dist:win": "npm run icons && electron-builder --win",
+    "dist:mac": "npm run icons && electron-builder --mac",
+    "dist:linux": "npm run icons && electron-builder --linux",
     "install-hooks": "node hooks/install-hooks.mjs",
     "uninstall-hooks": "node hooks/install-hooks.mjs --remove",
     "test": "playwright test",
@@ -45,6 +53,8 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^10.7.0",
     "globals": "^17.7.0",
     "prettier": "^3.9.5"

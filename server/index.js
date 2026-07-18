@@ -276,8 +276,10 @@ export function createServer({ demo = DEMO, demoSpeed = SPEED } = {}) {
   return { app, server, wss, manager, close };
 }
 
-// Direct launch
-if (process.argv[1] && (process.argv[1].endsWith('index.js') || process.argv[1].endsWith('server'))) {
+// Direct launch. Skipped under Electron, where the desktop app imports
+// createServer() itself and owns the listen/shutdown lifecycle.
+if (!process.versions.electron
+  && process.argv[1] && (process.argv[1].endsWith('index.js') || process.argv[1].endsWith('server'))) {
   // Bind to loopback by default — session data (prompts, file paths, commands) is
   // sensitive and /ingest is an unauthenticated write. Set HOST=0.0.0.0 to expose
   // it deliberately (e.g. viewing from another machine).

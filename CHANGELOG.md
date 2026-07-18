@@ -2,14 +2,61 @@
 
 All notable changes to ClaudeLens are documented here.
 
-## [Unreleased]
+## [1.0.0] — 2026-07-18
 
-### Added
+First packaged release: a desktop app, a hardened server, and CI.
+
+### Added — desktop app
+- **Tray-resident desktop app** (Electron) for Windows, macOS and Linux. It keeps
+  ClaudeLens running in the background, shows a live session count in the tray,
+  hides to tray on close, and opens the UI in its own window or your browser.
+- **Adopts a running server** instead of fighting for the port — if the
+  `SessionStart` hook already started one, the app attaches to it.
+- **Start at login** toggle (login item on Windows/macOS, XDG autostart on Linux)
+  and **hook install/remove** straight from the tray menu.
+- Installers via `npm run dist` — NSIS `.exe`, `.dmg`, `AppImage` and `.deb`.
+- App and tray icons are **generated from code** (`npm run icons`), so no opaque
+  binaries are committed.
+
+### Added — security & robustness
+- **Credential redaction** at the ingest boundary: vendor API keys, AWS ids, JWTs,
+  bearer tokens, `KEY=VALUE` secrets and inline URL credentials are masked before
+  anything is written to `data/` or included in an export (`AGENTVIZ_NO_REDACT=1`
+  opts out). Pattern-based — treat `data/` as sensitive regardless.
+- **Auth gate** on write endpoints via `AGENTVIZ_TOKEN` (`X-Agentviz-Token` or
+  `Bearer`); reads stay open. The hook bridge forwards it.
+- **Rate limiting** on writes (600 / 10 s / IP). Loopback is exempt by default —
+  local bursts are legitimate; `AGENTVIZ_RATE_ALL=1` throttles it too.
+- **Input validation** (malformed body → 400) and an error handler (oversized →
+  413, otherwise 500) so no request can crash the process.
+- **Loopback-only bind** by default; `HOST=0.0.0.0` warns on boot.
+- **Transcript reads allowlisted** to `~/.claude/*.jsonl`, closing an
+  arbitrary-file-read path.
+- **Disk caps**: 10 MB per session file, 300 files total with oldest-first eviction.
+- **WebSocket heartbeat** (30 s ping/pong) reaps half-open sockets.
+
+### Added — quality
+- **85 automated tests**: 52 `node --test` unit tests (normalizer, sessions, SDK
+  bridge, persistence, redaction, auth, ingest guards) + 33 Playwright E2E.
+- **ESLint** flat config (`npm run lint`), Prettier available opt-in.
+- **CI** (GitHub Actions): lint + unit + E2E + smoke stress on every push, plus
+  hook-installer verification on **Ubuntu and macOS**.
+- `start.sh` for macOS/Linux; **Dockerfile** for a shared viewer instance.
+
+### Fixed
+- Renaming the project folder no longer orphans the installed hooks — the
+  installer identifies its own entries by script filename, so re-running it
+  re-points them cleanly and stays idempotent.
+- Playwright no longer collects the `node --test` unit files as E2E specs.
+- The "transient tool nodes" E2E test no longer depends on demo timing.
+- Removed leftover pre-rebrand strings, including user-facing installer output.
+
+### Earlier work (previously unreleased)
 - **Cross-session search** — 🔍 searches every session's events (`/api/search?q=`);
   click a hit to jump to that session.
 - **Scale & reliability** — a 300-session eviction cap bounds memory under load, a
   normalizer unit-test suite (`npm run test:unit`), a load test (`npm run stress` —
-  ~1,550 req/s at ~370 MB), enriched `/api/health` (uptime, memory), and a CI workflow.
+  41,000 ingests at ~1,900 req/s, ~370 MB), enriched `/api/health`, and a CI workflow.
 - **Durable history** — every live session is persisted to `data/<id>.jsonl` and
   replayed on startup, so sessions and their timelines survive a server restart.
   Disable with `AGENTVIZ_NO_PERSIST=1`; relocate with `AGENTVIZ_DATA`.

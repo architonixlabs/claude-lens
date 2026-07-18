@@ -20,14 +20,24 @@ nothing ever leaves your machine unless you deliberately bind it to your network
 
 ![ClaudeLens](docs/screenshot.png)
 
-Quickest start — both launchers free the port, start the server and open the UI:
+## Install
+
+**Desktop app (recommended)** — a tray-resident build for Windows, macOS and Linux that keeps
+ClaudeLens running in the background. Grab an installer from
+[Releases](https://github.com/architonixlabs/claude-lens/releases), then use the tray menu →
+**Install Claude Code hooks…** and restart your Claude sessions. Tray → **Start at login**
+makes it permanent. See [RELEASE.md](RELEASE.md) for per-platform notes (the builds are
+unsigned, so SmartScreen/Gatekeeper will warn).
+
+**From source** — requires **Node 18+**; both launchers free the port, start the server and
+open the UI:
 
 | Windows     | macOS / Linux |
 |-------------|---------------|
 | `start.bat` | `./start.sh`  |
 
-Requires **Node 18+**. Add `demo` to either (`start.bat demo`) to watch the built-in
-synthetic run instead of waiting for a live session.
+Add `demo` to either (`start.bat demo`) to watch the built-in synthetic run instead of
+waiting for a live session.
 
 ---
 
@@ -334,10 +344,27 @@ tests/
   e2e.spec.js                       Playwright end-to-end suite (33)
   normalize|sessions|sdk|persist    node:test unit suites
   redact|auth|ingest-guards         security + guard unit suites
+desktop/
+  main.js         Electron tray app: adopts-or-starts the server, tray menu, autostart
+  make-icons.mjs  generates the app + tray icons from code (npm run icons)
 start.bat / start.sh    launchers (Windows / macOS+Linux)
 Dockerfile              shared-viewer image (non-root, healthcheck, /data volume)
+electron-builder.yml    installer config (nsis / dmg / AppImage / deb)
 .github/workflows/ci.yml lint + tests + cross-platform hook-installer checks
 ```
+
+### Desktop app
+
+`npm run desktop` runs it from source; `npm run dist` builds installers for the current
+platform (`dist/`). Each OS must be built on that OS — a macOS `.dmg` can't be produced from
+Windows or Linux.
+
+Two details worth knowing if you touch the packaging:
+
+- **`hooks/` is unpacked from the asar.** Claude Code launches the bridge with plain `node`,
+  which cannot read inside an asar archive, so those files must exist on disk.
+- **The packaged app stores history in the OS user-data directory**, not next to the
+  executable — the app directory is read-only inside the asar.
 
 ---
 

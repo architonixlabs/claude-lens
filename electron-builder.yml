@@ -1,0 +1,69 @@
+appId: com.architonixlabs.claudelens
+productName: ClaudeLens
+copyright: Copyright © Architonix Labs
+
+directories:
+  output: dist
+  buildResources: build
+
+# Ship only what the app needs at runtime. Tests, sim scenarios, CI config and
+# the dev toolchain stay out of the bundle.
+files:
+  - server/**/*
+  - public/**/*
+  - desktop/main.js
+  - desktop/assets/**/*
+  - hooks/**/*
+  - build/icon.png
+  - package.json
+  # server/index.js imports the simulator at module load (demo mode), so these
+  # must ship even though the desktop app never runs a demo — omitting them
+  # makes the packaged app fail with ERR_MODULE_NOT_FOUND on startup.
+  - sim/simulator.js
+  - sim/scenario.js
+  - '!**/*.map'
+
+# Claude Code launches the hook bridge with plain `node`, which cannot read
+# files inside an asar archive — so hooks/ must exist as real files on disk.
+asarUnpack:
+  - hooks/**/*
+  - desktop/assets/**/*
+  - build/icon.png
+
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+  icon: build/icon.png
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: ClaudeLens
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+  # Menu-bar app: no dock icon, no window on launch beyond what we open.
+  extendInfo:
+    LSUIElement: false
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64]
+  icon: build/icon.png
+  category: Development
+  synopsis: Read-only live map & timeline debugger for Claude Code runs
+
+# Unsigned builds are fine for local/internal use; add certificates before any
+# public distribution or macOS Gatekeeper and SmartScreen will block them.
+publish: null
