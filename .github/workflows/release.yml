@@ -58,22 +58,30 @@ jobs:
       - name: Lint + unit tests
         run: npm run lint && npm run test:unit
 
+      # Signing is opt-in. CSC_LINK must be genuinely ABSENT when unsigned —
+      # setting it to an empty string makes electron-builder resolve it as a
+      # path and fail with "<workspace> not a file", so it is exported only
+      # when the secret actually has a value.
       - name: Build installers
-        run: ${{ matrix.build }}
+        shell: bash
         env:
-          # Signing is opt-in. When the org certificates are configured as
-          # secrets these are picked up automatically; without them
-          # electron-builder produces unsigned artifacts rather than failing.
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          # Don't let electron-builder grab a random keychain identity on macOS
-          # runners when we haven't supplied one.
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK && 'true' || 'false' }}
-          # macOS notarization (needs an Apple Developer account).
+          CSC_LINK_SECRET: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD_SECRET: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "${CSC_LINK_SECRET:-}" ]; then
+            echo "signing with the configured certificate"
+            export CSC_LINK="$CSC_LINK_SECRET"
+            export CSC_KEY_PASSWORD="${CSC_KEY_PASSWORD_SECRET:-}"
+          else
+            echo "no certificate configured — building unsigned"
+            # Stop electron-builder grabbing a random macOS keychain identity.
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          ${{ matrix.build }}
 
       - name: List artifacts
         shell: bash
@@ -90,5 +98,16 @@ jobs:
           if [ ${#assets[@]} -eq 0 ]; then
             echo "no installer artifacts produced"; exit 1
           fi
+
+          # A tag push creates the tag, not the release. Create it on first use —
+          # the three platform jobs race here, so a losing creator is fine as long
+          # as the release then exists.
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "ClaudeLens ${TAG#v}" \
+              --notes-file RELEASE.md || true
+          fi
+          gh release view "$TAG" >/dev/null   # fail loudly if it still isn't there
+
           printf 'uploading %s\n' "${assets[@]}"
           gh release upload "$TAG" "${assets[@]}" --clobber
