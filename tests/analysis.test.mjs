@@ -5,6 +5,7 @@ import { SessionManager } from '../server/sessions.js';
 import {
   detectStalls, detectLoops, slowestCalls, healthScore, grade,
   buildReportCard, reportCardMarkdown, STALL_MS,
+  effortByAgent, estimateCost, loadPricing,
 } from '../server/analysis.js';
 
 // Build a session by feeding real hook payloads through the real pipeline.
@@ -137,4 +138,53 @@ test('grade thresholds', () => {
 test('session summary exposes a cheap stalled flag', () => {
   const s = makeSession([tool('Bash', 't1', { command: 'x' })]);
   assert.equal(s.summary().stalled, false, 'fresh session is not stalled');
+});
+
+test('effortByAgent attributes time and calls, ranked, with shares summing sanely', () => {
+  const s = makeSession([]);
+  s.events.push(
+    { type: 'tool_use', agentId: 'a1', agentName: 'worker-a', agentType: 'subagent', ts: 1 },
+    { type: 'tool_result', agentId: 'a1', agentName: 'worker-a', durationMs: 9000, ts: 2 },
+    { type: 'tool_use', agentId: 'a2', agentName: 'worker-b', agentType: 'subagent', ts: 3 },
+    { type: 'tool_result', agentId: 'a2', agentName: 'worker-b', durationMs: 1000, error: true, ts: 4 },
+  );
+  const effort = effortByAgent(s);
+
+  assert.equal(effort[0].name, 'worker-a', 'slowest agent ranks first');
+  assert.equal(effort[0].durationMs, 9000);
+  assert.equal(effort[0].sharePct, 90);
+  assert.equal(effort[1].errors, 1, 'errors are attributed to the right agent');
+  assert.equal(effort.reduce((n, e) => n + e.sharePct, 0), 100);
+});
+
+test('effortByAgent is empty for a session with no activity', () => {
+  assert.deepEqual(effortByAgent(makeSession([], 'quiet')).filter((e) => e.calls > 0), []);
+});
+
+test('pricing is opt-in: no env config means no invented cost', () => {
+  assert.equal(loadPricing({}), null);
+  assert.equal(estimateCost({ input: 1e6, output: 1e6 }, null), null,
+    'without pricing we must report tokens, never a made-up number');
+});
+
+test('estimateCost computes from real token counts and values cache savings', () => {
+  const pricing = loadPricing({ AGENTVIZ_PRICE_INPUT: '3', AGENTVIZ_PRICE_OUTPUT: '15', AGENTVIZ_PRICE_CACHE_READ: '0.3' });
+  assert.deepEqual(pricing, { input: 3, output: 15, cacheRead: 0.3, cacheCreation: 0 });
+
+  const cost = estimateCost({ input: 1e6, output: 1e6, cacheRead: 1e6, cacheCreation: 0 }, pricing);
+  assert.equal(cost.breakdown.input, 3);
+  assert.equal(cost.breakdown.output, 15);
+  assert.ok(Math.abs(cost.breakdown.cacheRead - 0.3) < 1e-9);
+  assert.ok(Math.abs(cost.total - 18.3) < 1e-9);
+  // 1M cached tokens billed at 0.3 instead of 3 → saved 2.7
+  assert.ok(Math.abs(cost.savedByCache - 2.7) < 1e-9);
+  assert.equal(cost.estimated, true, 'must be labelled an estimate');
+});
+
+test('report card includes effort, and omits cost when pricing is unset', () => {
+  const s = makeSession([tool('Read', 't1', { file_path: '/a' }), done('Read', 't1')]);
+  const card = buildReportCard(s);
+  assert.ok(Array.isArray(card.effort));
+  assert.equal(card.cost, null, 'no pricing configured → no cost claimed');
+  assert.ok(!reportCardMarkdown(card).includes('**Cost**'));
 });

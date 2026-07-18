@@ -121,6 +121,7 @@ All settings are environment variables; the server also accepts `--port=`, `--ho
 | `AGENTVIZ_SPEED` | `1` | Demo playback multiplier. |
 | `AGENTVIZ_VERBOSE` | `0` | `1` logs every ingested event (default logs only new sessions + errors). |
 | `AGENTVIZ_TRANSCRIPT_DIRS` | *(unset)* | Extra directories allowed for transcript reads, beyond `~/.claude`. |
+| `AGENTVIZ_PRICE_INPUT` / `_OUTPUT` / `_CACHE_READ` / `_CACHE_WRITE` | *(unset)* | USD per **million** tokens. Cost reporting is off until you set these — see below. |
 
 The hook bridge reads `AGENTVIZ_PORT` / `AGENTVIZ_URL` / `AGENTVIZ_TOKEN` to find and
 authenticate against the server.
@@ -409,6 +410,23 @@ curl localhost:4317/api/alerts
 - 4 errors (−40)
 - 1 repeated call pattern (−12)
 ```
+
+### Cost
+
+Cost reporting is **off until you configure prices** — published rates change, and a stale
+hard-coded table that quietly reports the wrong money is worse than reporting none. Set USD
+per million tokens and the report gains a cost line plus what cache reuse saved you:
+
+```bash
+AGENTVIZ_PRICE_INPUT=3 AGENTVIZ_PRICE_OUTPUT=15 AGENTVIZ_PRICE_CACHE_READ=0.3 npm start
+# → - **Cost**: ~$1.6200 (estimated; cache reuse saved ~$2.4300)
+```
+
+Effort is attributed **per agent** as time, calls and errors — deliberately *not* tokens.
+Hook payloads carry no per-tool token counts (usage comes from the session transcript as a
+running total), so a per-subagent token split would be invented rather than measured.
+
+### What it detects
 
 The score starts at 100 and subtracts, so **every deduction traces to something you can point
 at** — no opaque metric. It detects:

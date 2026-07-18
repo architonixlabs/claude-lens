@@ -52,10 +52,14 @@ the data is already captured and normalized.
       sessions — the feed a notifier or an agent polls instead of watching the graph.
 - [x] **Tray surfacing.** Alerts appear at the top of the tray menu with a `⚠ n` tooltip,
       so trouble reaches you without opening anything.
-- [ ] **Desktop notifications** — OS-level toast on new alerts (the data layer is done;
-      this is the delivery).
-- [ ] **Cost attribution.** Per subagent and per tool, not just a session token total.
-      Answers "why did this run cost so much?" Usage data is already collected.
+- [x] **Desktop notifications** — OS toast on each *new* problem, collapsed into one when a
+      burst arrives, and forgotten once resolved so the same issue can alert again later.
+      Toggle in the tray; preference persisted to userData.
+- [x] **Cost + effort attribution.** Session cost from real token counts, plus what cache
+      reuse saved. Pricing is opt-in via env — a stale hard-coded rate table reporting wrong
+      money is worse than reporting none. Effort is attributed per agent as **time, calls and
+      errors, not tokens**: hook payloads carry no per-tool token counts, so a per-subagent
+      token split would be invented rather than measured.
 - [ ] **Baseline comparison** — "deviating from *your* normal", not just absolute thresholds.
 
 ## 🔵 P3 — Substrate: one model, many renderers

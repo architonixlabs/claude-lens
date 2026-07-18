@@ -13,7 +13,7 @@
 // `electron` is CommonJS: a default import + destructure is the interop-safe
 // form. Named ESM imports fail outright when this is loaded by plain Node.
 import electron from 'electron';
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog } = electron;
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, Notification } = electron;
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -36,7 +36,59 @@ let closeServer = null;   // set when we own the server
 let adopted = false;      // true when another instance already had the port
 let sessionCount = 0;
 let alerts = [];          // stalls / loops / errors worth surfacing
+const notified = new Set(); // alert keys already announced, so we don't nag
 let quitting = false;
+
+// Small persisted preferences file (notifications on/off). Kept in userData so
+// it survives updates and doesn't live next to the read-only app bundle.
+const PREFS_FILE = () => path.join(app.getPath('userData'), 'preferences.json');
+
+function readPrefs() {
+  try { return JSON.parse(fs.readFileSync(PREFS_FILE(), 'utf8')); }
+  catch { return {}; }
+}
+
+function writePrefs(patch) {
+  const next = { ...readPrefs(), ...patch };
+  try {
+    fs.mkdirSync(path.dirname(PREFS_FILE()), { recursive: true });
+    fs.writeFileSync(PREFS_FILE(), JSON.stringify(next, null, 2));
+  } catch { /* preferences are a convenience, never fatal */ }
+  return next;
+}
+
+const notificationsEnabled = () => readPrefs().notifications !== false; // default on
+
+// One notification per distinct problem. Re-announcing the same stall every poll
+// would train you to ignore it, which defeats the purpose.
+function announce(list) {
+  if (!notificationsEnabled() || !Notification.isSupported()) return;
+
+  const fresh = list.filter((a) => !notified.has(alertKey(a)));
+  if (!fresh.length) return;
+
+  // Collapse a burst into one notification rather than a stack of toasts.
+  const first = fresh[0];
+  const more = fresh.length - 1;
+  const body = more > 0
+    ? `${first.label}: ${first.message} (+${more} more)`
+    : `${first.label}: ${first.message}`;
+
+  const n = new Notification({
+    title: first.kind === 'stall' ? 'ClaudeLens — session stalled'
+      : first.kind === 'loop' ? 'ClaudeLens — repeated calls'
+        : 'ClaudeLens — errors',
+    body,
+    icon: appIcon(),
+    silent: false,
+  });
+  n.on('click', showWindow);
+  n.show();
+
+  for (const a of fresh) notified.add(alertKey(a));
+}
+
+const alertKey = (a) => `${a.sessionId}|${a.kind}|${a.message}`;
 
 // ── server ──────────────────────────────────────────────────────────────────
 
@@ -160,6 +212,12 @@ function buildMenu() {
     { label: 'Remove hooks', click: () => runHookInstaller(true) },
     { type: 'separator' },
     { label: 'Start at login', type: 'checkbox', checked: login, click: (m) => setOpenAtLogin(m.checked) },
+    {
+      label: 'Notify on problems',
+      type: 'checkbox',
+      checked: notificationsEnabled(),
+      click: (m) => { writePrefs({ notifications: m.checked }); refreshMenu(); },
+    },
     { type: 'separator' },
     { label: 'Quit ClaudeLens', click: () => { quitting = true; app.quit(); } },
   ]);
@@ -190,6 +248,10 @@ async function pollSessions() {
       const list = Array.isArray(next) ? next : [];
       // Only redraw when the alert set actually differs, not on every poll.
       if (JSON.stringify(list) !== JSON.stringify(alerts)) { alerts = list; changed = true; }
+      announce(list);
+      // Forget resolved alerts so the same problem can notify again if it returns.
+      const live = new Set(list.map(alertKey));
+      for (const k of notified) if (!live.has(k)) notified.delete(k);
     }
     if (changed) refreshMenu();
   } catch { /* server momentarily unavailable — keep the last known state */ }
