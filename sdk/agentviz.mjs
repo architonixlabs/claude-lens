@@ -1,5 +1,5 @@
 // agentviz.mjs — drop this into your Claude Agent SDK app to stream its sessions
-// into the Agent Constellation visualizer. Zero deps, fire-and-forget (never
+// into the ClaudeLens visualizer. Zero deps, fire-and-forget (never
 // throws, never blocks your app), works with @anthropic-ai/claude-agent-sdk
 // (TypeScript/Node) — or any code that yields SDK stream messages.
 //

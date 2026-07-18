@@ -2,7 +2,7 @@
 // claude-hook.mjs — Claude Code hook bridge.
 //
 // Claude Code invokes this on hook events and pipes the event JSON on stdin.
-// We forward it to the Agent Constellation server's /ingest endpoint. It is
+// We forward it to the ClaudeLens server's /ingest endpoint. It is
 // deliberately fire-and-forget with a short timeout: the visualizer must NEVER
 // slow down or block a real Claude session, and must never fail the hook.
 //

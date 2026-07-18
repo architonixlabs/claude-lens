@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// install-hooks.mjs — wire Agent Constellation into your Claude Code settings.
+// install-hooks.mjs — wire ClaudeLens into your Claude Code settings.
 //
 // It APPENDS our bridge command to each relevant hook event, leaving any hooks
 // you already have (other tools, etc.) untouched. Idempotent: running twice does
@@ -104,7 +104,7 @@ function main() {
   fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
 
   if (REMOVE) {
-    console.log(`✔ Removed Agent Constellation from ${removed} hook entr${removed === 1 ? 'y' : 'ies'} in ${file}`);
+    console.log(`✔ Removed ClaudeLens from ${removed} hook entr${removed === 1 ? 'y' : 'ies'} in ${file}`);
   } else {
     console.log(`✔ Installed ${added} hook commands (removed ${removed} stale copies) in ${file}`);
     console.log(`  forward:     ${bridgeCommand()}`);

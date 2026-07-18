@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ensure-server.mjs — make sure the Agent Constellation server is running.
+// ensure-server.mjs — make sure the ClaudeLens server is running.
 //
 // Wired into the SessionStart hook by install-hooks.mjs so the visualizer is
 // always available: if the server isn't up, this starts it DETACHED (it outlives
