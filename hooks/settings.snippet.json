@@ -1,0 +1,33 @@
+{
+  "//": "Merge the `hooks` block into your .claude/settings.json (project) or ~/.claude/settings.json (global).",
+  "//command": "Replace ABSOLUTE_PATH with the absolute path to hooks/claude-hook.mjs in this repo. On Windows use double backslashes.",
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [
+        { "type": "command", "command": "node ABSOLUTE_PATH/hooks/ensure-server.mjs" },
+        { "type": "command", "command": "node ABSOLUTE_PATH/hooks/claude-hook.mjs" }
+      ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "node ABSOLUTE_PATH/hooks/claude-hook.mjs" } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "node ABSOLUTE_PATH/hooks/claude-hook.mjs" } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "node ABSOLUTE_PATH/hooks/claude-hook.mjs" } ] }
+    ],
+    "SubagentStop": [
+      { "hooks": [ { "type": "command", "command": "node ABSOLUTE_PATH/hooks/claude-hook.mjs" } ] }
+    ],
+    "Notification": [
+      { "hooks": [ { "type": "command", "command": "node ABSOLUTE_PATH/hooks/claude-hook.mjs" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "node ABSOLUTE_PATH/hooks/claude-hook.mjs" } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "node ABSOLUTE_PATH/hooks/claude-hook.mjs" } ] }
+    ]
+  }
+}

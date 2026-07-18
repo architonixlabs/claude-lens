@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClaudeLens — Claude Multi-Agent Visualization</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+
+    <header id="topbar">
+      <div class="brand">
+        <span class="dot" aria-hidden="true"></span>
+        <div>
+          <h1>ClaudeLens</h1>
+          <p class="sub">Read-only live map of Claude agents &amp; subagents</p>
+        </div>
+      </div>
+      <div class="top-right">
+        <button type="button" id="overview-toggle" class="overview-toggle" title="Show all sessions in one view">▦ All</button>
+        <button type="button" id="search-btn" class="icon-btn" title="Search all sessions (events)">🔍</button>
+        <button type="button" id="export-btn" class="icon-btn" title="Download the current session as JSON">⇩</button>
+        <button type="button" id="viewing-pill" class="viewing-pill" title="Session shown on the canvas — click to see all sessions" hidden>
+          <span class="vw-label">viewing</span>
+          <span id="viewing-name">—</span>
+        </button>
+        <div id="model-pill" class="model-pill" hidden>
+          <span class="mp-label">model</span>
+          <span id="model-name">—</span>
+        </div>
+        <div id="status" class="status" data-state="connecting">
+          <span class="pulse" aria-hidden="true"></span>
+          <span id="status-text">connecting…</span>
+        </div>
+      </div>
+    </header>
+
+    <section id="taskboxes" aria-label="Tasks">
+      <div class="taskbox" data-kind="ongoing">
+        <div class="tb-head"><span class="tb-dot"></span><span class="tb-name">Ongoing</span><span class="tb-count" id="tb-ongoing-count">0</span></div>
+        <ol class="tb-list" id="tb-ongoing"></ol>
+      </div>
+      <div class="taskbox" data-kind="completed">
+        <div class="tb-head"><span class="tb-dot"></span><span class="tb-name">Completed</span><span class="tb-count" id="tb-completed-count">0</span></div>
+        <ol class="tb-list" id="tb-completed"></ol>
+      </div>
+    </section>
+
+    <aside id="sessions" aria-label="Active sessions">
+      <div class="sessions-head">
+        <h2>Sessions</h2>
+        <span id="sessions-count" class="pill">0</span>
+        <button type="button" class="panel-collapse" data-target="sessions" title="Collapse">▾</button>
+      </div>
+      <div class="sessions-body">
+        <section class="sess-section" data-status="active">
+          <div class="sess-sec-head"><span class="sec-name">Active</span><span class="sec-count">0</span></div>
+          <ol class="sess-list" id="sess-active"></ol>
+        </section>
+        <section class="sess-section" data-status="idle">
+          <div class="sess-sec-head"><span class="sec-name">Inactive</span><span class="sec-count">0</span>
+            <button type="button" class="sec-clear" data-status="idle">clear</button></div>
+          <ol class="sess-list" id="sess-idle"></ol>
+        </section>
+        <section class="sess-section" data-status="ended">
+          <div class="sess-sec-head"><span class="sec-name">Done</span><span class="sec-count">0</span>
+            <button type="button" class="sec-clear" data-status="ended">clear</button></div>
+          <ol class="sess-list" id="sess-ended"></ol>
+        </section>
+        <div class="sessions-empty" id="sessions-empty">Waiting for a Claude session…</div>
+      </div>
+    </aside>
+
+    <aside id="legend" aria-label="Legend">
+      <div class="legend-head"><span>Legend</span>
+        <button type="button" class="panel-collapse" data-target="legend" title="Collapse">▾</button></div>
+      <div class="legend-body">
+        <div class="legend-row"><i class="swatch user"></i> You</div>
+        <div class="legend-row"><i class="swatch orch"></i> Orchestrator</div>
+        <div class="legend-row"><i class="swatch sub"></i> Subagent</div>
+        <div class="legend-sep"></div>
+        <div class="legend-row"><i class="swatch tool"></i> ⚙ Tool</div>
+        <div class="legend-row"><i class="swatch skill"></i> ◆ Skill</div>
+        <div class="legend-row"><i class="swatch mcp"></i> ⬡ MCP</div>
+        <div class="legend-sep"></div>
+        <div class="legend-row"><i class="swatch st-active"></i> active</div>
+        <div class="legend-row"><i class="swatch st-done"></i> done</div>
+      </div>
+    </aside>
+
+    <section id="stats" aria-label="Statistics">
+      <div class="stat"><span class="num" id="stat-agents">0</span><span class="lbl">agents</span></div>
+      <div class="stat"><span class="num" id="stat-active">0</span><span class="lbl">active</span></div>
+      <div class="stat"><span class="num" id="stat-events">0</span><span class="lbl">events</span></div>
+      <div class="stat"><span class="num" id="stat-tokens">0</span><span class="lbl">tokens</span></div>
+      <div class="stat cache-tile" id="stat-cache-tile"><span class="num" id="stat-cache">0%</span><span class="lbl">cache</span></div>
+      <div class="stat err-tile" id="stat-errors-tile"><span class="num" id="stat-errors">0</span><span class="lbl">errors</span></div>
+    </section>
+
+    <aside id="logpanel" aria-label="Interaction log">
+      <div class="log-head">
+        <div class="log-title-row">
+          <h2>Interaction log</h2>
+          <button type="button" class="panel-collapse" data-target="logpanel" title="Collapse">▾</button>
+        </div>
+        <div class="log-controls">
+          <input id="log-filter" type="search" placeholder="filter…" aria-label="Filter log" />
+          <button type="button" id="log-autoscroll" class="toggle on" title="Auto-scroll" aria-pressed="true">↧</button>
+          <button type="button" id="log-pause" class="toggle" title="Fit graph to view">⤢</button>
+        </div>
+      </div>
+      <ol id="log" tabindex="0"></ol>
+      <div class="log-foot"><span id="log-count">0</span> events · read-only</div>
+    </aside>
+
+    <aside id="inspector" aria-label="Node inspector" hidden>
+      <div class="insp-head">
+        <span class="insp-dot" id="insp-dot" aria-hidden="true"></span>
+        <h2 id="insp-name">—</h2>
+        <button type="button" class="insp-close" id="insp-close" title="Close inspector" aria-label="Close inspector">✕</button>
+      </div>
+      <div class="insp-meta" id="insp-meta"></div>
+      <div class="insp-stats" id="insp-stats" hidden></div>
+      <div class="insp-events-head"><span>Events</span><span class="insp-ev-count" id="insp-ev-count">0</span></div>
+      <ol class="insp-events" id="insp-events"></ol>
+    </aside>
+
+    <div id="tooltip" role="tooltip" hidden></div>
+
+    <!-- cross-session search -->
+    <div id="search" hidden aria-label="Search all sessions">
+      <div class="search-box">
+        <input id="search-input" type="search" placeholder="Search every session's events…" aria-label="Search" />
+        <button type="button" id="search-close" class="ov-close">esc</button>
+      </div>
+      <ol id="search-results" class="search-results"></ol>
+      <div id="search-empty" class="search-empty">Type to search across every session.</div>
+    </div>
+
+    <div id="timeline" aria-label="Timeline scrubber" hidden>
+      <button type="button" id="tl-play" class="tl-btn" title="Play / pause replay" aria-label="Play">▶</button>
+      <input type="range" id="tl-range" min="0" max="0" value="0" step="1" aria-label="Scrub timeline" />
+      <div class="tl-readout">
+        <span id="tl-pos" class="tl-pos">0 / 0</span>
+        <span id="tl-time" class="tl-time">--:--:--</span>
+      </div>
+      <button type="button" id="tl-live" class="tl-live is-live" title="Return to live" aria-label="Return to live">● LIVE</button>
+    </div>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

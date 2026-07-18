@@ -1,0 +1,20 @@
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
+
+# Node / build
+node_modules/
+npm-debug.log*
+
+# persisted session history + Claude settings backups
+/data/
+.claude/settings.json.bak-*
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/
+
+# OS / editor
+.DS_Store
+*.local
