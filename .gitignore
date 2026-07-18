@@ -21,3 +21,8 @@ npm-debug.log*
 
 # Electron build output
 /dist/
+
+# Code-signing material — never commit
+/certs/
+*.pfx
+*.p12

@@ -1,0 +1,94 @@
+name: Release
+
+# Builds installers for all three platforms and attaches them to the GitHub
+# Release. Each OS must build on its own runner — a macOS .dmg cannot be
+# produced from Windows or Linux.
+#
+# Trigger by pushing a tag (v1.2.3), or manually via workflow_dispatch with the
+# tag name. Manual runs are handy for rebuilding assets without re-tagging.
+#
+# Cost note: this repo is private, so macOS runner minutes bill at 10x and
+# Windows at 2x against the monthly allowance. Linux is 1x. A full release is
+# roughly 10 macOS-equivalent minutes; make the repo public and all of it is free.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and upload (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Linux (AppImage + deb)
+            build: npm run dist:linux
+          - os: macos-latest
+            name: macOS (dmg, x64 + arm64)
+            build: npm run dist:mac
+          - os: windows-latest
+            name: Windows (nsis)
+            build: npm run dist:win
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Sanity-gate the release: never ship a build whose tests don't pass.
+      - name: Lint + unit tests
+        run: npm run lint && npm run test:unit
+
+      - name: Build installers
+        run: ${{ matrix.build }}
+        env:
+          # Signing is opt-in. When the org certificates are configured as
+          # secrets these are picked up automatically; without them
+          # electron-builder produces unsigned artifacts rather than failing.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Don't let electron-builder grab a random keychain identity on macOS
+          # runners when we haven't supplied one.
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK && 'true' || 'false' }}
+          # macOS notarization (needs an Apple Developer account).
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List artifacts
+        shell: bash
+        run: ls -lh dist/ | grep -Ev '^total|unpacked|builder-' || true
+
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          shopt -s nullglob
+          assets=(dist/*.exe dist/*.dmg dist/*.AppImage dist/*.deb dist/*.blockmap)
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "no installer artifacts produced"; exit 1
+          fi
+          printf 'uploading %s\n' "${assets[@]}"
+          gh release upload "$TAG" "${assets[@]}" --clobber

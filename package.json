@@ -44,7 +44,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "stress": "node sim/stress.js",
-    "postinstall-note": "run: npx playwright install chromium"
+    "postinstall-note": "run: npx playwright install chromium",
+    "make-cert": "node scripts/make-signing-cert.mjs"
   },
   "dependencies": {
     "express": "^4.21.2",

@@ -223,23 +223,88 @@ def report(message, sid="my-py-app"):
 
 ## How it works
 
-```text
-Claude Code sessions ─stdin JSON→ claude-hook.mjs ─POST /ingest──────→ ┐
-SDK apps (agentviz)  ─SDK msgs──→ POST /ingest/sdk → sdk.js → payloads ┤
-sim/simulator.js (demo) ─────────────────────────── ingest() ─────────┤
-                                                                       │
-                                              auth → rate limit → validate → redact
-                                                                       │
-                                                                       ▼
-                                                                  SessionManager
-                                                    session_id → { Normalizer → graph, events }
-                                                          │                        │
-                                       persist.js ────────┘                        │
-                                    data/<id>.jsonl (replayed on boot)             ▼
-                                                        session list + per-session snapshot/update
-                                                                       │  WebSocket /ws  (+ heartbeat)
-                                                                       ▼
-                         Browser: session picker · 2D node-link graph · interaction log (public/)
+```mermaid
+flowchart TD
+    subgraph sources["Event sources"]
+        CC["Claude Code sessions<br/><i>hook events on stdin</i>"]
+        SDKAPP["Agent SDK apps<br/><i>sdk/agentviz.mjs</i>"]
+        DEMO["sim/simulator.js<br/><i>demo mode</i>"]
+    end
+
+    CC -->|"POST /ingest"| GUARDS
+    SDKAPP -->|"POST /ingest/sdk"| SDKX["sdk.js<br/>SDK msgs → hook payloads"]
+    SDKX --> GUARDS
+    DEMO -->|"in-process ingest()"| SM
+
+    subgraph GUARDS["Ingest boundary"]
+        direction LR
+        A["auth<br/>AGENTVIZ_TOKEN"] --> B["rate limit"] --> C["validate"] --> D["redact<br/>credentials masked"]
+    end
+
+    GUARDS --> SM["SessionManager<br/><i>routes by session_id</i>"]
+    SM --> NORM["Normalizer per session<br/>agent graph + event buffer"]
+    NORM --> DISK[("data/&lt;id&gt;.jsonl<br/><i>replayed on boot</i>")]
+    DISK -.->|"restore on startup"| SM
+    NORM --> WS(["WebSocket /ws<br/><i>+ 30s heartbeat</i>"])
+    WS --> UI["Browser<br/>session picker · 2D graph · log"]
+
+    style GUARDS fill:#1e293b,stroke:#22d3ee,color:#e2e8f0
+    style SM fill:#0b1220,stroke:#22d3ee,color:#e2e8f0
+    style DISK fill:#0b1220,stroke:#64748b,color:#e2e8f0
+    style UI fill:#0b1220,stroke:#22d3ee,color:#e2e8f0
+```
+
+Redaction sits **before** persistence deliberately: nothing secret is ever written to disk or
+included in an export, rather than being scrubbed on the way out.
+
+### A tool call, end to end
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CC as Claude Code
+    participant H as claude-hook.mjs
+    participant S as Server
+    participant N as Normalizer
+    participant B as Browser
+
+    CC->>H: PreToolUse (Bash, tool_use_id=t1)
+    H->>S: POST /ingest (fire-and-forget, 400ms cap)
+    S->>N: ingest(payload)
+    N->>N: push t1 on the agent's call stack
+    N-->>S: tool_use event (kind, callId)
+    S-->>B: WS update → transient node + request pulse
+
+    Note over CC: tool runs…
+
+    CC->>H: PostToolUse (t1, result, exit code)
+    H->>S: POST /ingest
+    S->>N: ingest(payload)
+    N->>N: pair with t1 → duration, error?, retry?
+    N-->>S: tool_result event
+    S-->>B: WS update → response pulse, node fades
+```
+
+The bridge never blocks Claude: it exits `0` regardless, so if the server is down the hook
+simply no-ops.
+
+### Session lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> active: SessionStart
+    active --> active: any event
+    active --> idle: 90s without activity
+    idle --> active: new event
+    active --> ended: SessionEnd
+    idle --> ended: SessionEnd
+    ended --> [*]: cleared by user
+    idle --> [*]: evicted past the 300-session cap
+
+    note right of ended
+        "Clear" also deletes
+        the session from disk
+    end note
 ```
 
 Every hook payload carries a `session_id`; the **SessionManager** routes it to that
@@ -357,7 +422,11 @@ electron-builder.yml    installer config (nsis / dmg / AppImage / deb)
 
 `npm run desktop` runs it from source; `npm run dist` builds installers for the current
 platform (`dist/`). Each OS must be built on that OS — a macOS `.dmg` can't be produced from
-Windows or Linux.
+Windows or Linux, so `.github/workflows/release.yml` builds all three on GitHub runners and
+attaches them to the release when you push a `v*` tag.
+
+Code signing and per-platform build options (including why Let's Encrypt can't issue a
+code-signing certificate) are covered in **[SIGNING.md](SIGNING.md)**.
 
 Two details worth knowing if you touch the packaging:
 
