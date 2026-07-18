@@ -15,9 +15,19 @@ It is generic (any Claude Code session, any task), self-hosted, offline-capable,
 as a lightweight hook you drop into your Claude settings — plus a bridge for **Claude Agent
 SDK** apps.
 
+Zero runtime dependencies beyond Express and `ws`; no build step, no CDN, no telemetry —
+nothing ever leaves your machine unless you deliberately bind it to your network.
+
 ![ClaudeLens](docs/screenshot.png)
 
-Quickest start on Windows: **`start.bat`** (frees the port, launches the server, opens the UI).
+Quickest start — both launchers free the port, start the server and open the UI:
+
+| Windows     | macOS / Linux |
+|-------------|---------------|
+| `start.bat` | `./start.sh`  |
+
+Requires **Node 18+**. Add `demo` to either (`start.bat demo`) to watch the built-in
+synthetic run instead of waiting for a live session.
 
 ---
 
@@ -82,9 +92,41 @@ npm run demo
 npm start
 ```
 
-- `PORT` (default `4317`) — server port.
-- `AGENTVIZ_DEMO=1` — auto-play the demo scenario on a loop (what `npm run demo` sets).
-- `AGENTVIZ_SPEED` — demo playback multiplier (default `1`).
+### Configuration
+
+All settings are environment variables; the server also accepts `--port=`, `--host=`,
+`--demo` and `--speed=` as CLI flags (flags win, so npm scripts work on Windows too).
+
+| Variable | Default | What it does |
+|----------|---------|--------------|
+| `PORT` | `4317` | Server port. |
+| `HOST` / `AGENTVIZ_HOST` | `127.0.0.1` | Bind address. **Loopback by default** — see [Security](#security--privacy) before changing it. |
+| `AGENTVIZ_TOKEN` | *(unset)* | Shared secret required on write endpoints. Strongly recommended if you expose the port. |
+| `AGENTVIZ_DATA` | `./data` | Where session history (JSONL) is stored. |
+| `AGENTVIZ_NO_PERSIST` | `0` | `1` disables writing history to disk entirely. |
+| `AGENTVIZ_NO_REDACT` | `0` | `1` disables credential masking. Leave it on unless debugging the tool. |
+| `AGENTVIZ_RATE_MAX` | `600` | Write requests per 10 s per IP; `0` disables. Loopback is exempt. |
+| `AGENTVIZ_RATE_ALL` | `0` | `1` also rate-limits loopback (off by default — local bursts are legitimate). |
+| `AGENTVIZ_DEMO` | `0` | `1` auto-plays the synthetic multi-agent run on a loop. |
+| `AGENTVIZ_SPEED` | `1` | Demo playback multiplier. |
+| `AGENTVIZ_VERBOSE` | `0` | `1` logs every ingested event (default logs only new sessions + errors). |
+| `AGENTVIZ_TRANSCRIPT_DIRS` | *(unset)* | Extra directories allowed for transcript reads, beyond `~/.claude`. |
+
+The hook bridge reads `AGENTVIZ_PORT` / `AGENTVIZ_URL` / `AGENTVIZ_TOKEN` to find and
+authenticate against the server.
+
+### Docker
+
+ClaudeLens can't read hooks from inside a container (hooks run on the host), so the image is
+meant as a **shared viewer** that host machines post to:
+
+```bash
+docker build -t claude-lens .
+docker run -p 4317:4317 -e AGENTVIZ_TOKEN=your-secret -v claudelens-data:/data claude-lens
+```
+
+Then point each machine's bridge at it:
+`AGENTVIZ_URL=http://<host>:4317/ingest AGENTVIZ_TOKEN=your-secret`.
 
 ---
 
@@ -174,11 +216,18 @@ def report(message, sid="my-py-app"):
 ```text
 Claude Code sessions ─stdin JSON→ claude-hook.mjs ─POST /ingest──────→ ┐
 SDK apps (agentviz)  ─SDK msgs──→ POST /ingest/sdk → sdk.js → payloads ┤
-sim/simulator.js (demo) ─────────────────────────── ingest() ─────────┼─ SessionManager
-                                                                       │    session_id → { Normalizer → graph, events }
+sim/simulator.js (demo) ─────────────────────────── ingest() ─────────┤
+                                                                       │
+                                              auth → rate limit → validate → redact
+                                                                       │
                                                                        ▼
-                                             session list  +  per-session snapshot/update
-                                                                       │  WebSocket /ws  (client subscribes to one)
+                                                                  SessionManager
+                                                    session_id → { Normalizer → graph, events }
+                                                          │                        │
+                                       persist.js ────────┘                        │
+                                    data/<id>.jsonl (replayed on boot)             ▼
+                                                        session list + per-session snapshot/update
+                                                                       │  WebSocket /ws  (+ heartbeat)
                                                                        ▼
                          Browser: session picker · 2D node-link graph · interaction log (public/)
 ```
@@ -241,11 +290,19 @@ npm test
              task boxes · viewing · combined canvas · export · search · health · SDK · labels
 ```
 
-- `npm run test:unit` — 10 unit tests for the normalizer (the core parser).
-- Standalone persistence check — a session survives a server restart.
+- `npm run test:unit` — **52 unit tests** (`node --test`) covering the normalizer, session
+  routing/eviction/usage/search, the SDK bridge, disk persistence + replay, credential
+  redaction, the auth gate, and the ingest guards.
+- `npm run lint` — ESLint (flat config). `npm run test:all` runs lint + unit + E2E.
 - `npm run stress [sessions] [eventsPer]` — load test. Sample: **41,000 ingests, 0 fail,
-  ~1,550 req/s, p99 58ms, memory ~370 MB** (the 300-session eviction cap holds it flat),
-  cross-session search 50 hits in ~5 ms.
+  ~1,900 req/s, p99 54 ms, memory ~370 MB** (the 300-session eviction cap holds it flat),
+  cross-session search 50 hits in ~8 ms.
+
+CI (GitHub Actions) runs lint + unit + E2E + a smoke stress on every push, and separately
+verifies the hook installer is idempotent and uninstalls cleanly on **Ubuntu and macOS**.
+
+> `npm test` runs Playwright only — unit tests are `node --test`. Playwright's `testMatch` is
+> pinned to `*.spec.js` so it doesn't also collect the `*.test.mjs` unit files.
 
 ---
 
@@ -253,10 +310,12 @@ npm test
 
 ```text
 server/
-  index.js        Express + WebSocket server, /ingest, /api/sessions, WS subscribe, demo autostart
+  index.js        Express + WebSocket server, /ingest, /api/*, WS subscribe, auth, rate limit
   normalize.js    raw hook payloads → normalized events + agent graph (single source of truth)
-  sessions.js     Session + SessionManager: per-session_id graph, event buffer, pub/sub
-  transcript.js   incremental transcript reader → model + token usage per session
+  sessions.js     Session + SessionManager: per-session_id graph, event buffer, pub/sub, eviction
+  transcript.js   incremental transcript reader → model + token usage (path-allowlisted)
+  persist.js      append-only JSONL history + replay on boot, with disk caps
+  redact.js       masks credentials at the ingest boundary, before anything is stored
   sdk.js          Claude Agent SDK messages → hook payloads (for /ingest/sdk)
 sdk/
   agentviz.mjs    drop-in client for SDK apps: viz.tap(query(...)) streams sessions in
@@ -268,11 +327,46 @@ hooks/
 sim/
   scenario.js     three scripted runs (security audit / feature build / docs) as hook payloads
   simulator.js    drives several concurrent demo sessions, or one session over HTTP
+  stress.js       load generator (npm run stress)
 public/
   index.html, css/, js/{main,scene,ws,log}.js   (scene.js = 2D canvas node-link renderer)
 tests/
-  e2e.spec.js     Playwright end-to-end suite
+  e2e.spec.js                       Playwright end-to-end suite (33)
+  normalize|sessions|sdk|persist    node:test unit suites
+  redact|auth|ingest-guards         security + guard unit suites
+start.bat / start.sh    launchers (Windows / macOS+Linux)
+Dockerfile              shared-viewer image (non-root, healthcheck, /data volume)
+.github/workflows/ci.yml lint + tests + cross-platform hook-installer checks
 ```
+
+---
+
+## Security & privacy
+
+Session data is **sensitive** — it carries your prompts, file paths, commands and tool
+output. The defaults assume a single developer on one machine, and the tool is built to fail
+closed rather than leak.
+
+- **Loopback by default.** The server binds `127.0.0.1`, so nothing is reachable from your
+  network until you deliberately set `HOST=0.0.0.0` (which prints a warning on boot).
+- **Credential redaction.** Before anything is stored or exported, string values are scrubbed
+  of vendor API keys, AWS access-key ids, JWTs, bearer tokens, `KEY=VALUE` secrets and inline
+  URL credentials (`server/redact.js`). Surrounding context stays readable —
+  `curl -H "x-api-key: sk-ant«redacted»"`. This is **pattern matching, not a guarantee**:
+  treat `data/` as sensitive regardless. `AGENTVIZ_NO_REDACT=1` turns it off.
+- **Auth on writes.** Set `AGENTVIZ_TOKEN` and `/ingest`, `/ingest/sdk` and
+  `/api/sessions/clear` require it (`X-Agentviz-Token` or `Authorization: Bearer`); reads stay
+  open. **Set this whenever you bind beyond loopback.**
+- **Rate limiting** on writes (600 per 10 s per IP). Loopback is exempt by default — local
+  bursts from replay, parallel subagents or the stress harness are legitimate and run far
+  above any human rate. `AGENTVIZ_RATE_ALL=1` throttles loopback too.
+- **Transcript reads are allowlisted** to `*.jsonl` under `~/.claude` (extendable via
+  `AGENTVIZ_TRANSCRIPT_DIRS`), so a malicious payload can't turn the token reader into an
+  arbitrary-file read.
+- **Input validation + error handling.** Malformed bodies get a `400`, oversized ones `413`;
+  nothing reaches the normalizer unvalidated and no request can crash the process.
+- **Disk is bounded** (see below), so a runaway session can't fill the drive.
+- `data/` is **git-ignored** — session history is never committed.
 
 ---
 
@@ -286,8 +380,18 @@ tests/
 - The UI is a **dependency-free 2D canvas** renderer (`public/js/scene.js`) — no WebGL, no
   CDN, no build step; runs fully offline and stays legible on any hardware.
 - Attribution of non-`Task` tool calls to a specific subagent is heuristic (see above).
-- State is **in-memory** — restarting the server clears history; the browser resyncs from
-  the next snapshot automatically.
+- **History survives restarts.** Each session is appended to `data/<session>.jsonl` and
+  replayed through the *same* normalizer on boot, so graphs and event history are rebuilt
+  exactly. Bounded on purpose: replay loads the 40 most-recent sessions, a single file stops
+  growing at 10 MB, and the directory is capped at 300 files (oldest evicted). In memory, 300
+  sessions are kept and the least-recently-active are dropped beyond that. Clearing a session
+  in the UI also deletes it from disk.
+- **Renaming the project folder** breaks the installed hooks, which store absolute paths —
+  re-run `npm run install-hooks` afterwards. The installer recognises its own entries by
+  script filename (not folder name), so it re-points them cleanly and stays idempotent.
+- The server must be **restarted to pick up code changes** — the auto-start hook otherwise
+  keeps an older build resident while the browser serves fresh files from disk.
 - Static analysis: `sonar-project.properties` is included per the Architonix Labs standard
   (SonarQube `http://<build-host>:7001`); scan from a host with LAN reach using tokens from
-  the shared `scan.env` — never hard-code them.
+  the shared `scan.env` — never hard-code them. The server is LAN-only, so cloud CI can't
+  reach it; run the scanner from the deploy host or a self-hosted runner.
