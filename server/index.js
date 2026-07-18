@@ -20,6 +20,7 @@ import { SessionManager } from './sessions.js';
 import { sdkMessageToPayloads } from './sdk.js';
 import * as persist from './persist.js';
 import { redactPayload } from './redact.js';
+import { buildReportCard, reportCardMarkdown } from './analysis.js';
 import { driveDemo } from '../sim/simulator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -150,6 +151,49 @@ export function createServer({ demo = DEMO, demoSpeed = SPEED } = {}) {
   });
 
   app.get('/api/sessions', (_req, res) => res.json({ sessions: manager.list() }));
+
+  // A run's verdict: health score, stalls, repeated calls, slowest steps.
+  // ?format=md returns markdown you can paste straight into an issue.
+  app.get('/api/report', (req, res) => {
+    const id = req.query.session ? String(req.query.session) : manager.list()[0]?.id;
+    const s = id && manager.get(id);
+    if (!s) return res.status(404).json({ ok: false, error: 'session not found' });
+    const card = buildReportCard(s);
+    if (req.query.format === 'md') {
+      res.type('text/markdown').send(reportCardMarkdown(card));
+      return;
+    }
+    res.json(card);
+  });
+
+  // Everything currently worth a human's attention, across all sessions —
+  // the feed a notifier (or an agent) polls instead of watching the graph.
+  app.get('/api/alerts', (_req, res) => {
+    const now = Date.now();
+    const alerts = [];
+    for (const s of manager.sessions.values()) {
+      const card = buildReportCard(s, now);
+      if (card.stall.stalled) {
+        alerts.push({
+          sessionId: s.id, label: card.label, kind: 'stall', severity: 'warn',
+          message: `no activity for ${Math.round(card.stall.silentMs / 60000)}m with ${card.stall.agents.length} agent(s) active`,
+        });
+      }
+      for (const l of card.loops) {
+        alerts.push({
+          sessionId: s.id, label: card.label, kind: 'loop', severity: 'warn',
+          message: `${l.tool} called ${l.count}× with identical input`,
+        });
+      }
+      if (card.errors > 0) {
+        alerts.push({
+          sessionId: s.id, label: card.label, kind: 'error', severity: 'error',
+          message: `${card.errors} error${card.errors === 1 ? '' : 's'}`,
+        });
+      }
+    }
+    res.json({ count: alerts.length, alerts });
+  });
 
   // every session's graph — powers the combined "all on one canvas" view (also an
   // HTTP fallback so the combined view populates instantly / without WS support).

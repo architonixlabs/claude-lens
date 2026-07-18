@@ -35,6 +35,7 @@ let win = null;
 let closeServer = null;   // set when we own the server
 let adopted = false;      // true when another instance already had the port
 let sessionCount = 0;
+let alerts = [];          // stalls / loops / errors worth surfacing
 let quitting = false;
 
 // ── server ──────────────────────────────────────────────────────────────────
@@ -133,7 +134,22 @@ function trayIcon() {
 
 function buildMenu() {
   const login = getOpenAtLogin();
+
+  // Surface what's wrong before anything else — the whole point is that you
+  // shouldn't have to open the app to find out.
+  const alertItems = alerts.length
+    ? [
+      { label: `⚠ ${alerts.length} alert${alerts.length === 1 ? '' : 's'}`, enabled: false },
+      ...alerts.slice(0, 5).map((a) => ({
+        label: `   ${a.label}: ${a.message}`,
+        click: () => { showWindow(); },
+      })),
+      { type: 'separator' },
+    ]
+    : [];
+
   return Menu.buildFromTemplate([
+    ...alertItems,
     { label: sessionCount === 1 ? '1 session tracked' : `${sessionCount} sessions tracked`, enabled: false },
     { label: adopted ? `Attached to server on :${PORT}` : `Serving on :${PORT}`, enabled: false },
     { type: 'separator' },
@@ -151,19 +167,32 @@ function buildMenu() {
 
 function refreshMenu() {
   if (!tray) return;
-  tray.setToolTip(`ClaudeLens — ${sessionCount} session${sessionCount === 1 ? '' : 's'}`);
+  const warn = alerts.length ? `  ⚠ ${alerts.length}` : '';
+  tray.setToolTip(`ClaudeLens — ${sessionCount} session${sessionCount === 1 ? '' : 's'}${warn}`);
   tray.setContextMenu(buildMenu());
 }
 
 async function pollSessions() {
   try {
-    const res = await fetch(`${BASE}/api/sessions`);
-    if (res.ok) {
-      const { sessions } = await res.json();
+    const [sesRes, alertRes] = await Promise.all([
+      fetch(`${BASE}/api/sessions`),
+      fetch(`${BASE}/api/alerts`),
+    ]);
+
+    let changed = false;
+    if (sesRes.ok) {
+      const { sessions } = await sesRes.json();
       const next = Array.isArray(sessions) ? sessions.length : 0;
-      if (next !== sessionCount) { sessionCount = next; refreshMenu(); }
+      if (next !== sessionCount) { sessionCount = next; changed = true; }
     }
-  } catch { /* server momentarily unavailable — keep the last known count */ }
+    if (alertRes.ok) {
+      const { alerts: next } = await alertRes.json();
+      const list = Array.isArray(next) ? next : [];
+      // Only redraw when the alert set actually differs, not on every poll.
+      if (JSON.stringify(list) !== JSON.stringify(alerts)) { alerts = list; changed = true; }
+    }
+    if (changed) refreshMenu();
+  } catch { /* server momentarily unavailable — keep the last known state */ }
 }
 
 // ── hooks + autostart ───────────────────────────────────────────────────────

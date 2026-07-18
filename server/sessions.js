@@ -5,6 +5,7 @@
 
 import { Normalizer, ROOT_ID, USER_ID } from './normalize.js';
 import { readUsage } from './transcript.js';
+import { detectStalls } from './analysis.js';
 
 const MAX_EVENTS = 3000;
 const MAX_SESSIONS = 300;      // cap live sessions in memory (evict oldest inactive)
@@ -174,6 +175,10 @@ export class Session {
       errors: this.meta.errors, tools: this.meta.tools,
       cacheHitPct, trimmed: this.meta.trimmed, toolBreakdown: this.meta.toolBreakdown,
       lastEvent, activeAgents,
+      // Cheap enough for the hot path (timestamp comparison only). The richer
+      // judgements — loops, health score — scan events, so they stay on-demand
+      // behind /api/report and /api/alerts rather than running per broadcast.
+      stalled: detectStalls(this, now).stalled,
     };
   }
 

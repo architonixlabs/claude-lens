@@ -381,11 +381,55 @@ verifies the hook installer is idempotent and uninstalls cleanly on **Ubuntu and
 
 ---
 
+## Verdicts, not just pictures
+
+The graph shows you *what happened*; these tell you whether it went well. Both are plain
+HTTP, so a script, a notifier or an agent can consume them without opening the UI.
+
+```bash
+# One run's verdict — grade, 0-100 health, loops, stalls, slowest calls
+curl localhost:4317/api/report?session=<id>
+
+# ...as markdown, to paste into an issue or a PR
+curl "localhost:4317/api/report?session=<id>&format=md"
+
+# Only what deserves attention, across every session
+curl localhost:4317/api/alerts
+```
+
+```text
+# payments — degraded (48/100)
+
+- **Status**: active
+- **Duration**: 3m
+- **Agents**: 1 · **Tool calls**: 5 · **Errors**: 4
+
+## Why the score is not 100
+
+- 4 errors (−40)
+- 1 repeated call pattern (−12)
+```
+
+The score starts at 100 and subtracts, so **every deduction traces to something you can point
+at** — no opaque metric. It detects:
+
+- **Stalls** — an agent silent past the threshold while still marked active. An *ended*
+  session is finished, not stuck, so it never reports as stalled.
+- **Loops** — the same tool called with identical input three or more times (thrashing, not
+  retrying).
+- **Errors**, low cache reuse, and memory trimming.
+
+The desktop tray shows alerts at the top of its menu with a `⚠ n` tooltip, so trouble reaches
+you without opening anything.
+
+---
+
 ## Project layout
 
 ```text
 server/
   index.js        Express + WebSocket server, /ingest, /api/*, WS subscribe, auth, rate limit
+  analysis.js     turns an observed run into a judgement: stalls, loops, health, report card
   normalize.js    raw hook payloads → normalized events + agent graph (single source of truth)
   sessions.js     Session + SessionManager: per-session_id graph, event buffer, pub/sub, eviction
   transcript.js   incremental transcript reader → model + token usage (path-allowlisted)

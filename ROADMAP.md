@@ -42,18 +42,21 @@ thrashing?" The graph shows you what happened; it never tells you whether that w
 The theme: stop describing runs, start judging them. Highest impact for least effort, because
 the data is already captured and normalized.
 
-- [ ] **Stall & loop detection.** Flag an agent silent for N minutes, or repeating a call it
-      already made. The retry flag already exists — promote it from a badge to an alert.
-- [ ] **Run report card + health score.** One markdown summary per run — duration, cost,
-      tools, errors, retries, slowest chain — compressed to a single 0–100 score. Report
-      card, health score and anomaly feed are one idea in three hats: turn a run into a
-      verdict absorbable at a glance.
+- [x] **Stall & loop detection** (`server/analysis.js`). An agent silent past `STALL_MS`
+      while still active is stalled; identical repeated calls are aggregated into a loop.
+      An *ended* session is finished, not stuck — never reported as stalled.
+- [x] **Run report card + health score.** `GET /api/report?session=<id>` (add `&format=md`
+      for pasteable markdown): grade, 0–100 score with every deduction traced to a named
+      reason, duration, tokens, errors, loops and slowest calls.
+- [x] **Anomaly feed.** `GET /api/alerts` returns only what deserves attention across all
+      sessions — the feed a notifier or an agent polls instead of watching the graph.
+- [x] **Tray surfacing.** Alerts appear at the top of the tray menu with a `⚠ n` tooltip,
+      so trouble reaches you without opening anything.
+- [ ] **Desktop notifications** — OS-level toast on new alerts (the data layer is done;
+      this is the delivery).
 - [ ] **Cost attribution.** Per subagent and per tool, not just a session token total.
       Answers "why did this run cost so much?" Usage data is already collected.
-- [ ] **Desktop notifications** on error, stall and budget breach — the tray app is already
-      resident, so this is nearly free and needs zero attention.
-- [ ] **Anomaly-only surfacing.** Silence is the default and silence is informative; only
-      runs deviating from your baseline surface at all.
+- [ ] **Baseline comparison** — "deviating from *your* normal", not just absolute thresholds.
 
 ## 🔵 P3 — Substrate: one model, many renderers
 
