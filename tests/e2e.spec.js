@@ -111,15 +111,36 @@ test.describe('ClaudeLens', () => {
     await expect.poll(() => page.locator('#sessions .session-card.selected').count()).toBe(1);
   });
 
-  test('tool / skill / mcp calls animate as transient nodes', async ({ page }) => {
+  test('tool / skill / mcp calls animate as transient nodes', async ({ page, request }) => {
+    // Drive this deterministically rather than waiting for the demo loop to
+    // happen to fire a tool call on whichever session auto-selected — that race
+    // made this test flaky under load (it depends on demo timing, not the code
+    // under test). We ingest a known tool/skill/mcp burst, then view that session.
+    const sid = 'tool-anim-e2e';
+    const post = (p) => request.post('/ingest', { data: { session_id: sid, ...p } });
+
+    // Create the session first so it can be selected...
+    await post({ hook_event_name: 'SessionStart', cwd: '/repo/tool-anim' });
+
     await page.goto('/');
-    // the demo fires Glob/Skill/MCP/Read/etc — the scene should register tool calls
+    await expect.poll(() => page.evaluate(() => window.__agentviz.state), { timeout: 10000 }).toBe('live');
+    await page.evaluate((id) => window.__agentviz.selectSession(id), sid);
+    await expect.poll(() => page.evaluate(() => window.__agentviz.session), { timeout: 8000 }).toBe(sid);
+
+    // ...then fire the tool calls while the page is watching. Transient nodes are
+    // animated from LIVE events arriving over the socket; selecting a session
+    // rebuilds from a snapshot and does not re-animate history.
+    await post({ hook_event_name: 'PreToolUse', tool_name: 'Glob', tool_use_id: 'a1', tool_input: { pattern: '**/*.ts' } });
+    await post({ hook_event_name: 'PreToolUse', tool_name: 'Skill', tool_use_id: 'a2', tool_input: { skill: 'code-review' } });
+    await post({ hook_event_name: 'PreToolUse', tool_name: 'mcp__sonarqube__show_rule', tool_use_id: 'a3', tool_input: {} });
+
+    // the scene registers the tool calls as transient nodes
     await expect.poll(
-      () => page.evaluate(() => window.__agentviz && window.__agentviz.tools),
+      () => page.evaluate(() => window.__agentviz.tools),
       { timeout: 15000, message: 'expected transient tool-call nodes to appear' }
     ).toBeGreaterThan(0);
 
-    // the log should show tool activity rows too
+    // and the log shows tool activity rows
     await expect(page.locator('#log li.type-tool_use').first()).toBeVisible({ timeout: 15000 });
   });
 

@@ -56,6 +56,9 @@ window.__agentviz = {
   get agentIds() { return currentGraph && currentGraph.agents ? Object.keys(currentGraph.agents) : []; },
   // Test hook: exercises the SAME open path a real canvas click triggers.
   openInspector: (id) => openInspector(id),
+  // Test hook: same path a session-card click triggers. Lets E2E drive a known
+  // session instead of waiting on demo timing.
+  selectSession: (id) => selectSession(id),
   // Timeline (record / scrub / replay) introspection seam.
   timelineMode: 'live',
   timelineIndex: -1,

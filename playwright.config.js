@@ -4,6 +4,10 @@ const PORT = process.env.TEST_PORT || 4399;
 
 export default defineConfig({
   testDir: './tests',
+  // Only E2E specs. Without this, Playwright's default testMatch also picks up
+  // the node:test unit files (tests/*.test.mjs) and runs them inside its own
+  // worker, where they execute a second time against the wrong environment.
+  testMatch: '**/*.spec.js',
   timeout: 30000,
   expect: { timeout: 10000 },
   fullyParallel: false,
