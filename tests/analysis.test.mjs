@@ -61,6 +61,50 @@ test('detectLoops catches an identical call repeated, and ignores varied calls',
   assert.deepEqual(detectLoops(varied), [], 'distinct commands are not a loop');
 });
 
+// Regression: two DIFFERENT edits to the SAME file must not be seen as a loop.
+// The old detector keyed Edit on file_path alone (the display summary), so any
+// repeated edits to one file false-positived — worse than OTel, which at least
+// sees the first 512 chars of content. Loop/retry detection now compares a
+// signature over the full untruncated tool input.
+test('different edits to the same file are NOT a loop (the OTel-beating case)', () => {
+  const editA = { file_path: 'src/api/routes.ts', old_string: 'app.get("/users", getUsers);', new_string: 'app.get("/users", auth, getUsers);' };
+  const editB = { file_path: 'src/api/routes.ts', old_string: 'app.get("/orders", getOrders);', new_string: 'app.get("/orders", auth, getOrders);' };
+
+  const s = makeSession([
+    tool('Edit', 'e1', editA), done('Edit', 'e1'),
+    tool('Edit', 'e2', editB), done('Edit', 'e2'),
+    tool('Edit', 'e3', editA), done('Edit', 'e3'),
+    tool('Edit', 'e4', editB), done('Edit', 'e4'),
+  ]);
+  assert.deepEqual(detectLoops(s), [], 'distinct edits to one file must not be a loop');
+
+  // ...but the SAME edit actually repeated IS a loop.
+  const looping = makeSession([
+    tool('Edit', 'x1', editA), done('Edit', 'x1'),
+    tool('Edit', 'x2', editA), done('Edit', 'x2'),
+    tool('Edit', 'x3', editA), done('Edit', 'x3'),
+  ]);
+  const loops = detectLoops(looping);
+  assert.equal(loops.length, 1, 'the same edit repeated 3× is a real loop');
+  assert.ok(loops[0].count >= 3);
+});
+
+// Two edits that differ ONLY beyond OTel's 512-char truncation still sign
+// differently, because hooks carry the full payload. This is the concrete
+// asymmetry the positioning rests on.
+test('edits differing past 512 chars are distinguished (untruncated signature)', () => {
+  const prefix = 'x'.repeat(600); // shared, longer than OTel's per-value limit
+  const editA = { file_path: 'f.ts', old_string: prefix + 'AAA', new_string: prefix + 'return 1;' };
+  const editB = { file_path: 'f.ts', old_string: prefix + 'BBB', new_string: prefix + 'return 2;' };
+  const s = makeSession([
+    tool('Edit', 'e1', editA), done('Edit', 'e1'),
+    tool('Edit', 'e2', editB), done('Edit', 'e2'),
+    tool('Edit', 'e3', editA), done('Edit', 'e3'),
+    tool('Edit', 'e4', editB), done('Edit', 'e4'),
+  ]);
+  assert.deepEqual(detectLoops(s), [], 'content differing past char 512 is still distinguished');
+});
+
 test('detectStalls: quiet + an agent still active = stalled', () => {
   const s = makeSession([tool('Bash', 't1', { command: 'sleep 900' })]); // never returns
   const now = Date.now() + STALL_MS + 1000;

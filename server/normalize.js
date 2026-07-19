@@ -43,6 +43,30 @@ function toolSummary(tool, input) {
   }
 }
 
+// Order-independent JSON of a value — so { a, b } and { b, a } sign identically.
+function canonical(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`;
+  return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}`;
+}
+
+// FNV-1a — a tiny, deterministic (no Date/Math.random) hash, so the event carries
+// a short fingerprint rather than the whole payload.
+function fnv1a(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36);
+}
+
+// A repeat signature over the FULL, untruncated tool input. This is the whole
+// point of consuming hooks instead of OpenTelemetry: OTel truncates tool_input
+// at 512 chars per value, so two different long edits collide; hooks see the
+// complete payload, so "did the agent actually repeat itself?" is answered on
+// real content — not on the file path, which every edit to one file shares.
+function toolSignature(tool, input) {
+  return `${tool} ${fnv1a(canonical(input ?? null))}`;
+}
+
 export class Normalizer {
   constructor() {
     this.graph = { agents: {}, edges: [] };
@@ -235,14 +259,17 @@ export class Normalizer {
           const detail = toolSummary(tool, payload.tool_input);
           // Thrashing signal: same owner calling the same tool with the same
           // input as one of its last ~3 calls → mark the event as a retry.
+          // Compared on a full-payload signature, NOT the display summary — two
+          // different edits to one file share a summary but not a signature.
+          const sig = toolSignature(tool, payload.tool_input);
           const recents = this.recent[owner] || (this.recent[owner] = []);
           let retryCount = 0;
-          for (const r of recents) if (r.name === name && r.detail === detail) retryCount++;
-          recents.push({ name, detail });
+          for (const r of recents) if (r.sig === sig) retryCount++;
+          recents.push({ sig });
           if (recents.length > 3) recents.shift();
           const retryExtra = retryCount > 0 ? { retry: true, retryCount } : {};
           out.push(this._mk(ts, 'tool_use', owner, {
-            tool: name, kind, callId, title: name, detail, ...retryExtra,
+            tool: name, kind, callId, title: name, detail, sig, ...retryExtra,
           }));
         }
         break;
