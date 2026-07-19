@@ -471,6 +471,30 @@ test.describe('ClaudeLens', () => {
     await expect.poll(() => page.evaluate(() => window.__agentviz.allMode)).toBe(false);
   });
 
+  test('combined canvas shows only active sessions — temp and ended excluded', async ({ page, request }) => {
+    // A temp (scratchpad) session and an ended one must never appear on the overview.
+    const temp = 'all-temp-' + Date.now();
+    const ended = 'all-ended-' + Date.now();
+    await request.post('/ingest', { data: { hook_event_name: 'SessionStart', session_id: temp, cwd: '/home/me/scratchpad/demo' } });
+    await request.post('/ingest', { data: { hook_event_name: 'PreToolUse', session_id: temp, tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: 'ls' } } });
+    await request.post('/ingest', { data: { hook_event_name: 'SessionStart', session_id: ended, cwd: '/repo/legacy' } });
+    await request.post('/ingest', { data: { hook_event_name: 'SessionEnd', session_id: ended } });
+
+    await page.goto('/');
+    await page.locator('#overview-toggle').click();
+    await expect.poll(() => page.evaluate(() => window.__agentviz.allMode)).toBe(true);
+
+    // The overview should populate (demo drives active sessions) but never include
+    // the temp or ended session we injected.
+    await expect.poll(
+      () => page.evaluate(() => window.__agentviz.allSessions.length),
+      { timeout: 15000 }
+    ).toBeGreaterThan(0);
+    const ids = await page.evaluate(() => window.__agentviz.allSessions);
+    expect(ids, 'temp session must be excluded from the overview').not.toContain(temp);
+    expect(ids, 'ended session must be excluded from the overview').not.toContain(ended);
+  });
+
   test('temp/default sessions are hidden from the picker', async ({ page, request }) => {
     await page.goto('/');
     await expect.poll(() => page.locator('#sessions .session-card').count(), { timeout: 15000 }).toBeGreaterThan(0);

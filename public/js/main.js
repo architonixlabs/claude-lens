@@ -59,6 +59,8 @@ window.__agentviz = {
   // Test hook: same path a session-card click triggers. Lets E2E drive a known
   // session instead of waiting on demo timing.
   selectSession: (id) => selectSession(id),
+  // Session ids currently on the combined "All" canvas (active, non-temp only).
+  get allSessions() { return allMode ? [...allGraphs.keys()] : []; },
   // Timeline (record / scrub / replay) introspection seam.
   timelineMode: 'live',
   timelineIndex: -1,
@@ -362,12 +364,23 @@ function isTempSession(s) {
   return cwd.includes('scratchpad') || /[\\/]temp[\\/]/.test(cwd) || cwd.includes('appdata\\local\\temp');
 }
 
+// The combined "All" canvas only shows sessions that are actually live — active
+// status, and not a temp/scratch session. This keeps the overview to what's
+// running now instead of a wall of idle/ended boxes. `meta` is a session summary
+// (has id, cwd, status); both the snapshot and the live-update paths carry it.
+function isLiveInAll(meta) {
+  return !!meta && meta.status === 'active' && !isTempSession(meta);
+}
+
 let latestSessions = [];
 
 function renderSessions(sessions) {
   sessions = (sessions || []).filter((s) => !isTempSession(s));
   latestSessions = sessions;
-  if (allMode) { aggregateHud(); pruneAllGraphs(sessions); }
+  // In All mode, prune the overview down to sessions that are still active.
+  // Idle transitions are time-based (no event fires), so this list refresh is
+  // what removes a box once its session goes quiet.
+  if (allMode) { pruneAllGraphs(sessions.filter((s) => s.status === 'active')); aggregateHud(); }
   window.__agentviz.sessions = sessions.length;
   countEl.textContent = sessions.length;
 
@@ -845,7 +858,8 @@ function aggregateHud() {
   statErrors.textContent = String(errs); errTile.classList.toggle('has-errors', errs > 0);
   statCache.textContent = '—'; cacheTile.classList.remove('good');
   modelPill.hidden = true;
-  updateViewing(`All sessions (${latestSessions.length})`);
+  // Count what's actually on the canvas (active sessions), not every session.
+  updateViewing(`Active sessions (${allGraphs.size})`);
 }
 
 function logMergedEvents(label, events) {
@@ -857,6 +871,7 @@ function applyAllSnapshot(sessions) {
   scene.reset(); log.reset();
   const evs = [];
   for (const s of sessions) {
+    if (!isLiveInAll(s.meta)) continue; // only active, non-temp sessions
     allGraphs.set(s.id, { graph: s.graph, label: s.label });
     for (const e of s.events || []) evs.push({ ...e, agentName: `[${s.label}] ${e.agentName || ''}` });
   }
@@ -887,6 +902,12 @@ function mergedVisualize(sid, ev) {
 }
 
 function applyAllUpdate(msg) {
+  // A session that has gone idle/ended (or is temp) drops off the overview.
+  if (!isLiveInAll(msg.meta)) {
+    if (allGraphs.delete(msg.sessionId)) renderMerged();
+    aggregateHud();
+    return;
+  }
   const label = msg.meta ? msg.meta.label : (allGraphs.get(msg.sessionId)?.label || msg.sessionId);
   allGraphs.set(msg.sessionId, { graph: msg.graph, label });
   renderMerged();
