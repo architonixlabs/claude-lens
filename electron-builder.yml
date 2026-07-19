@@ -64,6 +64,13 @@ linux:
   category: Development
   synopsis: Read-only live map & timeline debugger for Claude Code runs
 
-# Unsigned builds are fine for local/internal use; add certificates before any
-# public distribution or macOS Gatekeeper and SmartScreen will block them.
-publish: null
+# Auto-update feed. electron-updater reads the release assets here, and the
+# build emits latest.yml / latest-mac.yml / latest-linux.yml describing them.
+# Note: macOS auto-update needs a signed build (Squirrel.Mac requirement) — on
+# unsigned macOS it degrades to a no-op. Windows NSIS and Linux AppImage update
+# unsigned. The release workflow uploads the metadata alongside the installers;
+# nothing here auto-publishes (dist scripts pass `-p never`).
+publish:
+  provider: github
+  owner: architonixlabs
+  repo: claude-lens

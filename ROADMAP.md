@@ -85,7 +85,10 @@ ideas from one-off features into a platform.
 
 Cheaper to run, cheaper to maintain. Small items, real payback.
 
-- [ ] **Auto-update** (`electron-updater`) — without it, shipped fixes never reach anyone.
+- [x] **Auto-update** (`electron-updater`) — reads the GitHub release feed; the build emits
+      `latest*.yml` and the release workflow uploads it. Downloads in the background, notifies,
+      installs on restart. Non-fatal when offline / no release / unpackaged. *Caveat:* macOS
+      auto-update needs a signed build; unsigned macOS degrades to a no-op (see SIGNING.md).
 - [ ] **Split the Windows installer per architecture** — it currently ships x64+arm64 in one
       184 MB file; splitting roughly halves the download.
 - [ ] **`npx claude-lens` path** — same product at ~1% of the download for anyone who has

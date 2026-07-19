@@ -1,0 +1,62 @@
+name: Bug report
+description: Something ClaudeLens does wrong, crashes on, or shows incorrectly.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The single most useful attachment is an **exported session**
+        (the ⇩ button in the UI, or `GET /api/export?session=<id>`) — it replays through the
+        normalizer exactly, so we can reproduce what you saw. Redaction runs on export, but
+        skim it before attaching.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you see, and what did you expect instead?
+      placeholder: "Loop detection flagged Edit×4, but those were four different edits…"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run a session that …
+        2. Open ClaudeLens and …
+        3. Observe …
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: How are you running it?
+      options:
+        - Desktop app (installer)
+        - From source (npm start / start.sh / start.bat)
+        - Docker
+        - Demo mode
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ClaudeLens version
+      description: From the tray menu, the release you installed, or `git rev-parse --short HEAD`.
+      placeholder: "v1.0.2 / commit abc1234"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Windows, macOS, Linux]
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Server logs, screenshots, or an exported session (drag it in).
+    validations:
+      required: false

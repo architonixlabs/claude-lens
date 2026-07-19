@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest something ClaudeLens should do.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, a quick skim of [ROADMAP.md](../blob/main/ROADMAP.md) is worth it —
+        it explains what's planned and, just as usefully, what's deliberately **not** (a hosted
+        multi-tenant service, a runaway kill-switch) and why.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What can't you do today?
+      description: Describe the job you're trying to get done, not the solution yet. "I can't tell whether…" beats "add a button that…".
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you've tried or considered
+      description: Including whether Claude Code's native OpenTelemetry already covers it.
+    validations:
+      required: false

@@ -14,6 +14,9 @@
 // form. Named ESM imports fail outright when this is loaded by plain Node.
 import electron from 'electron';
 const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, Notification } = electron;
+// electron-updater is CommonJS too — same interop-safe default import.
+import electronUpdater from 'electron-updater';
+const { autoUpdater } = electronUpdater;
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -37,6 +40,7 @@ let adopted = false;      // true when another instance already had the port
 let sessionCount = 0;
 let alerts = [];          // stalls / loops / errors worth surfacing
 const notified = new Set(); // alert keys already announced, so we don't nag
+let updateInfo = null;    // set once an update has downloaded and is ready
 let quitting = false;
 
 // Small persisted preferences file (notifications on/off). Kept in userData so
@@ -167,6 +171,53 @@ function showWindow() {
   win.on('closed', () => { win = null; });
 }
 
+// ── auto-update ───────────────────────────────────────────────────────────
+//
+// Without this, every bug we ship is permanent — we can't reach an installed
+// user. Updates come from the GitHub release feed (configured in
+// electron-builder.yml). Failures here are always non-fatal: no release yet,
+// offline, running unpackaged, or an unsigned macOS build (Squarrel.Mac refuses
+// to auto-update without a signature — documented, and it degrades to a no-op).
+
+function wireUpdater() {
+  if (!app.isPackaged) return; // dev builds have no update feed
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-downloaded', (info) => {
+    updateInfo = info;
+    refreshMenu();
+    if (notificationsEnabled() && Notification.isSupported()) {
+      const n = new Notification({
+        title: 'ClaudeLens update ready',
+        body: `Version ${info.version} installs when you restart.`,
+        icon: appIcon(),
+      });
+      n.on('click', restartToUpdate);
+      n.show();
+    }
+  });
+  autoUpdater.on('error', () => { /* offline / no release / unsigned mac — ignore */ });
+
+  checkForUpdates(true);
+  const timer = setInterval(() => checkForUpdates(true), 6 * 60 * 60 * 1000);
+  timer.unref?.();
+}
+
+function checkForUpdates(quiet) {
+  if (!app.isPackaged) {
+    if (!quiet) dialog.showMessageBox({ type: 'info', title: 'ClaudeLens', message: 'Updates are only checked in installed builds.' });
+    return;
+  }
+  autoUpdater.checkForUpdates().catch(() => { /* non-fatal */ });
+}
+
+function restartToUpdate() {
+  if (!updateInfo) return;
+  quitting = true;
+  autoUpdater.quitAndInstall();
+}
+
 // ── tray ────────────────────────────────────────────────────────────────────
 
 function iconPath(name) { return path.join(RES, 'desktop', 'assets', name); }
@@ -207,6 +258,10 @@ function buildMenu() {
     { type: 'separator' },
     { label: 'Open ClaudeLens', click: showWindow },
     { label: 'Open in Browser', click: () => shell.openExternal(BASE) },
+    { type: 'separator' },
+    ...(updateInfo
+      ? [{ label: `↻ Restart to update (v${updateInfo.version})`, click: restartToUpdate }]
+      : [{ label: 'Check for updates', click: () => checkForUpdates(false) }]),
     { type: 'separator' },
     { label: 'Install Claude Code hooks…', click: () => runHookInstaller(false) },
     { label: 'Remove hooks', click: () => runHookInstaller(true) },
@@ -337,6 +392,7 @@ if (!app.requestSingleInstanceLock()) {
     const poll = setInterval(pollSessions, 4000);
     app.on('before-quit', () => clearInterval(poll));
 
+    wireUpdater();
     showWindow();
   });
 

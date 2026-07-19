@@ -2,6 +2,28 @@
 
 All notable changes to ClaudeLens are documented here.
 
+## [1.0.2] — 2026-07-19
+
+### Added
+- **Auto-update** (`electron-updater`). The desktop app checks the GitHub release
+  feed, downloads in the background, notifies, and installs on restart. The build
+  emits `latest*.yml` and the release workflow uploads it. Non-fatal offline / with
+  no release / unpackaged. macOS auto-update needs a signed build; unsigned macOS
+  degrades to a no-op.
+- **Run judgement** — session cost from real token counts (opt-in pricing via
+  `AGENTVIZ_PRICE_*`), per-agent effort attribution (time and calls, not invented
+  tokens), a 0–100 health score, and stall/loop detection surfaced as tray alerts
+  and OS notifications. `GET /api/report` and `GET /api/alerts`.
+- **Contributor front door** — `CONTRIBUTING.md`, issue forms and a PR template.
+
+### Fixed
+- **Loop detection false-positived on repeated edits to one file.** It compared
+  the display summary, which for an `Edit` is just the file path, so two *different*
+  edits to the same file were flagged as thrashing. It now compares a signature over
+  the full, untruncated tool input — which is precisely the advantage of consuming
+  hooks over OpenTelemetry (OTel truncates tool input at 512 chars/value).
+- Removed stray NUL bytes a history rewrite had left in two source files.
+
 ## [1.0.1] — 2026-07-18
 
 Fixes the release pipeline. 1.0.0 shipped a Windows installer only, because the

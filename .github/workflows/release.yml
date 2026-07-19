@@ -93,7 +93,9 @@ jobs:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           shopt -s nullglob
-          assets=(dist/*.exe dist/*.dmg dist/*.AppImage dist/*.deb dist/*.blockmap)
+          # Installers, blockmaps, AND the electron-updater feed metadata
+          # (latest*.yml) — without the yml files auto-update can't see the release.
+          assets=(dist/*.exe dist/*.dmg dist/*.AppImage dist/*.deb dist/*.blockmap dist/latest*.yml)
           if [ ${#assets[@]} -eq 0 ]; then
             echo "no installer artifacts produced"; exit 1
           fi

@@ -26,8 +26,9 @@ nothing ever leaves your machine unless you deliberately bind it to your network
 ClaudeLens running in the background. Grab an installer from
 [Releases](https://github.com/architonixlabs/claude-lens/releases), then use the tray menu →
 **Install Claude Code hooks…** and restart your Claude sessions. Tray → **Start at login**
-makes it permanent. See [RELEASE.md](RELEASE.md) for per-platform notes (the builds are
-unsigned, so SmartScreen/Gatekeeper will warn).
+makes it permanent, and it **auto-updates** from the release feed (Windows and Linux; macOS
+auto-update needs a signed build). See [RELEASE.md](RELEASE.md) for per-platform notes (the
+builds are unsigned, so SmartScreen/Gatekeeper will warn).
 
 **From source** — requires **Node 18+**; both launchers free the port, start the server and
 open the UI:
